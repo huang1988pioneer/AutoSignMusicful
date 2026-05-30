@@ -1,0 +1,15 @@
+{
+  "name": "musicful-auto-sign",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/musicful-signin.mjs --headed --setup",
+    "export-state": "node scripts/musicful-signin.mjs --headed --export-state",
+    "signin": "node scripts/musicful-signin.mjs",
+    "signin:headed": "node scripts/musicful-signin.mjs --headed"
+  },
+  "dependencies": {
+    "playwright": "^1.52.0"
+  }
+}

@@ -1,0 +1,32 @@
+name: Musicful Auto Sign
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "10 5 * * *"
+
+jobs:
+  signin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Musicful sign in
+        env:
+          MUSICFUL_STORAGE_STATE_BASE64: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64 }}
+          MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://www.musicful.ai/growth-center/' }}
+        run: npm run signin
