@@ -58,6 +58,17 @@ npm run export-state
 MUSICFUL_STORAGE_STATE_BASE64
 ```
 
+多帳號可繼續新增 secret，名稱依序使用：
+
+```text
+MUSICFUL_STORAGE_STATE_BASE64_2
+MUSICFUL_STORAGE_STATE_BASE64_3
+...
+MUSICFUL_STORAGE_STATE_BASE64_115
+```
+
+每個 secret 放一個帳號匯出的 `logs/musicful-storage-state.base64` 內容。workflow 會自動讀取 `MUSICFUL_STORAGE_STATE_BASE64` 到 `MUSICFUL_STORAGE_STATE_BASE64_115`，逐一簽到；其中一個帳號失敗時，其他帳號仍會繼續執行。
+
 workflow 會每天 UTC 05:10 執行，也就是台灣時間 13:10。你也可以在 GitHub Actions 頁面手動按 `Run workflow` 測試。
 
 ## 自訂網址

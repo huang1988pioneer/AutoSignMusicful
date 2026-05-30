@@ -8,7 +8,7 @@ on:
 jobs:
   signin:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,6 +27,7 @@ jobs:
 
       - name: Musicful sign in
         env:
-          MUSICFUL_STORAGE_STATE_BASE64: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64 }}
+          MUSICFUL_SECRETS_JSON: ${{ toJson(secrets) }}
+          MUSICFUL_MAX_ACCOUNTS: "115"
           MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://www.musicful.ai/growth-center/' }}
         run: npm run signin

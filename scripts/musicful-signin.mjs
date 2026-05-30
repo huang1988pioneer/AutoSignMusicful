@@ -13,6 +13,7 @@ const stateFile = path.join(logDir, "musicful-storage-state.base64");
 const signInUrl = process.env.MUSICFUL_SIGNIN_URL || "https://www.musicful.ai/growth-center/";
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const storageStateBase64 = process.env.MUSICFUL_STORAGE_STATE_BASE64;
+const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS || "115", 10);
 
 fs.mkdirSync(profileDir, { recursive: true });
 fs.mkdirSync(logDir, { recursive: true });
@@ -57,6 +58,108 @@ async function findAction(page) {
   return null;
 }
 
+function accountSortIndex(name) {
+  const match = name.match(/^MUSICFUL_STORAGE_STATE_BASE64(?:_(\d+))?$/);
+  return match?.[1] ? Number.parseInt(match[1], 10) : 1;
+}
+
+function collectStorageStates() {
+  const states = new Map();
+
+  if (storageStateBase64) {
+    states.set("MUSICFUL_STORAGE_STATE_BASE64", storageStateBase64);
+  }
+
+  if (process.env.MUSICFUL_SECRETS_JSON) {
+    const secrets = JSON.parse(process.env.MUSICFUL_SECRETS_JSON);
+    for (const [name, value] of Object.entries(secrets)) {
+      const match = name.match(/^MUSICFUL_STORAGE_STATE_BASE64(?:_(\d+))?$/);
+      if (!match || !value) continue;
+      const index = accountSortIndex(name);
+      if (index < 1 || index > maxAccounts) continue;
+      states.set(name, value);
+    }
+  }
+
+  return [...states.entries()]
+    .map(([name, value]) => ({ name, value, index: accountSortIndex(name) }))
+    .sort((a, b) => a.index - b.index);
+}
+
+function parseStorageState(encoded, name) {
+  try {
+    return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  } catch (error) {
+    throw new Error(`${name} is not valid base64 storage state: ${error.message}`);
+  }
+}
+
+function screenshotPath(accountName) {
+  const safeName = accountName.replace(/[^A-Za-z0-9_-]/g, "-");
+  return path.join(logDir, `musicful-signin-${stamp}-${safeName}.png`);
+}
+
+async function signInWithContext(context, accountName) {
+  log(`[${accountName}] Opening ${signInUrl}`);
+  const page = context.pages()[0] || await context.newPage();
+  page.setDefaultTimeout(20_000);
+
+  await page.goto(signInUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+
+  if (setupMode) {
+    log("Setup mode is open. Log in if needed, then press Ctrl+C here after the Growth Center shows your account.");
+    while (true) {
+      await page.waitForTimeout(60_000);
+    }
+  }
+
+  if (exportStateMode) {
+    const state = await context.storageState();
+    const encoded = Buffer.from(JSON.stringify(state), "utf8").toString("base64");
+    fs.writeFileSync(stateFile, `${encoded}\n`, { mode: 0o600 });
+    log(`Storage state exported: ${stateFile}`);
+    return;
+  }
+
+  const beforeText = await visibleText(page);
+  if (/(Log In|Login|登入|登录|Sign Up|會員登入|会员登录)/i.test(beforeText) && !/(Total|累計|累计|Credits|積分|积分)/i.test(beforeText)) {
+    throw new Error("Musicful is not logged in for this automation profile. Export a fresh storage state first.");
+  }
+
+  if (/(already checked|already signed|已簽到|已签到|今日已|今天已|checked in today)/i.test(beforeText)) {
+    log(`[${accountName}] Already signed in today.`);
+    return;
+  }
+
+  const action = await findAction(page);
+  if (!action) {
+    const screenshot = screenshotPath(accountName);
+    await page.screenshot({ path: screenshot, fullPage: true });
+    log(`[${accountName}] No visible sign-in action was found. Screenshot saved: ${screenshot}`);
+    if (/(累計|累计|Total).{0,20}\d+/i.test(beforeText)) {
+      log(`[${accountName}] Growth Center is reachable; it may already be signed in or the button text changed.`);
+      return;
+    }
+    throw new Error("Could not find the Musicful sign-in action.");
+  }
+
+  log(`[${accountName}] Clicking sign-in action: ${action.label}`);
+  await action.locator.click({ timeout: 10_000 });
+  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+  await page.waitForTimeout(3000);
+
+  const afterText = await visibleText(page);
+  const success = /(已簽到|已签到|今日已|今天已|success|signed|checked|累計|累计|Total)/i.test(afterText);
+  if (!success) {
+    const screenshot = screenshotPath(accountName);
+    await page.screenshot({ path: screenshot, fullPage: true });
+    throw new Error(`Clicked the action, but could not confirm success. Screenshot saved: ${screenshot}`);
+  }
+
+  log(`[${accountName}] Musicful sign-in finished.`);
+}
+
 async function main() {
   log(`Opening ${signInUrl}`);
   const browserOptions = {
@@ -72,14 +175,40 @@ async function main() {
     timezoneId: "Asia/Taipei"
   };
 
+  const storageStates = collectStorageStates();
+  if (storageStates.length > 0) {
+    log(`Found ${storageStates.length} Musicful account storage state(s).`);
+    const browser = await chromium.launch(browserOptions);
+    let failures = 0;
+
+    try {
+      for (const account of storageStates) {
+        const context = await browser.newContext({
+          ...contextOptions,
+          storageState: parseStorageState(account.value, account.name)
+        });
+
+        try {
+          await signInWithContext(context, account.name);
+        } catch (error) {
+          failures += 1;
+          log(`[${account.name}] Failed: ${error.message}`);
+        } finally {
+          await context.close();
+        }
+      }
+    } finally {
+      await browser.close();
+    }
+
+    if (failures > 0) {
+      throw new Error(`${failures} Musicful account(s) failed.`);
+    }
+    return;
+  }
+
   let context;
-  let browser;
-  if (storageStateBase64) {
-    const storageState = JSON.parse(Buffer.from(storageStateBase64, "base64").toString("utf8"));
-    browser = await chromium.launch(browserOptions);
-    context = await browser.newContext({ ...contextOptions, storageState });
-    log("Using storage state from MUSICFUL_STORAGE_STATE_BASE64.");
-  } else {
+  if (!storageStateBase64) {
     if (fs.existsSync(chromePath)) {
       browserOptions.channel = "chrome";
     }
@@ -90,70 +219,10 @@ async function main() {
     log("Using installed Google Chrome.");
   }
 
-  const page = context.pages()[0] || await context.newPage();
-  page.setDefaultTimeout(20_000);
-
   try {
-    await page.goto(signInUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
-
-    if (setupMode) {
-      log("Setup mode is open. Log in if needed, then press Ctrl+C here after the Growth Center shows your account.");
-      while (true) {
-        await page.waitForTimeout(60_000);
-      }
-      return;
-    }
-
-    if (exportStateMode) {
-      const state = await context.storageState();
-      const encoded = Buffer.from(JSON.stringify(state), "utf8").toString("base64");
-      fs.writeFileSync(stateFile, `${encoded}\n`, { mode: 0o600 });
-      log(`Storage state exported: ${stateFile}`);
-      return;
-    }
-
-    const beforeText = await visibleText(page);
-    if (/(Log In|Login|登入|登录|Sign Up|會員登入|会员登录)/i.test(beforeText) && !/(Total|累計|累计|Credits|積分|积分)/i.test(beforeText)) {
-      throw new Error("Musicful is not logged in for this automation profile. Run npm run setup first.");
-    }
-
-    if (/(already checked|already signed|已簽到|已签到|今日已|今天已|checked in today)/i.test(beforeText)) {
-      log("Already signed in today.");
-      return;
-    }
-
-    const action = await findAction(page);
-    if (!action) {
-      const screenshot = path.join(logDir, `musicful-signin-${stamp}.png`);
-      await page.screenshot({ path: screenshot, fullPage: true });
-      log(`No visible sign-in action was found. Screenshot saved: ${screenshot}`);
-      if (/(累計|累计|Total).{0,20}\d+/i.test(beforeText)) {
-        log("Growth Center is reachable; it may already be signed in or the button text changed.");
-        return;
-      }
-      throw new Error("Could not find the Musicful sign-in action.");
-    }
-
-    log(`Clicking sign-in action: ${action.label}`);
-    await action.locator.click({ timeout: 10_000 });
-    await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
-    await page.waitForTimeout(3000);
-
-    const afterText = await visibleText(page);
-    const success = /(已簽到|已签到|今日已|今天已|success|signed|checked|累計|累计|Total)/i.test(afterText);
-    if (!success) {
-      const screenshot = path.join(logDir, `musicful-signin-${stamp}.png`);
-      await page.screenshot({ path: screenshot, fullPage: true });
-      throw new Error(`Clicked the action, but could not confirm success. Screenshot saved: ${screenshot}`);
-    }
-
-    log("Musicful sign-in finished.");
+    await signInWithContext(context, "local-profile");
   } finally {
     await context.close();
-    if (browser) {
-      await browser.close();
-    }
   }
 }
 
