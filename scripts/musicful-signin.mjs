@@ -11,6 +11,7 @@ const profileDir = path.join(rootDir, ".musicful-profile");
 const logDir = path.join(rootDir, "logs");
 const stateFile = path.join(logDir, "musicful-storage-state.base64");
 const signInUrl = process.env.MUSICFUL_SIGNIN_URL || "https://tw.musicful.ai/growth-center/";
+const fallbackSignInUrl = process.env.MUSICFUL_FALLBACK_SIGNIN_URL || "https://www.musicful.ai/growth-center/";
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const storageStateBase64 = process.env.MUSICFUL_STORAGE_STATE_BASE64;
 const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS || "115", 10);
@@ -41,6 +42,46 @@ function logVisibleStatus(accountName, stage, text) {
   const musicPoints = text.match(/(\d+)\s*\/\s*\d+\s*音樂點/i)?.[1];
 
   log(`[${accountName}] ${stage} status: 累計=${streak || "not found"} 天, 積分=${growthPoints || "not found"}, 音樂點=${musicPoints || "not found"}.`);
+}
+
+function logReadableStatus(accountName, stage, text) {
+  const streak = text.match(/累計\s*[:：]\s*(\d+)\s*天/i)?.[1]
+    || text.match(/streak\s*[:：]?\s*(\d+)\s*(?:day|days)?/i)?.[1];
+  const growthPoints = text.match(/已獲得成長積分\s*(\d+)/i)?.[1]
+    || text.match(/積分\s*[:：]\s*(\d+)/i)?.[1]
+    || text.match(/growth\s*points?\s*(\d+)/i)?.[1];
+  const musicPoints = text.match(/(\d+)\s*\/\s*\d+\s*音樂點/i)?.[1]
+    || text.match(/(\d+)\s*\/\s*\d+\s*music\s*points?/i)?.[1];
+
+  log(`[${accountName}] ${stage} status: streakDays=${streak || "not found"}, growthPoints=${growthPoints || "not found"}, musicPoints=${musicPoints || "not found"}.`);
+}
+
+async function logPageDiagnostics(page, accountName, stage) {
+  const calendarItems = await page.locator(".calendar-box .calendar-item").count().catch(() => 0);
+  const luckyDrops = await page.locator(".continuous-check-box .flex-1").count().catch(() => 0);
+  const collectAllButtons = await page.locator("button.collect-all-btn").count().catch(() => 0);
+  const text = await visibleText(page).catch(() => "");
+  const excerpt = text.slice(0, 420);
+
+  log(`[${accountName}] ${stage} diagnostics: url=${page.url()}, calendarItems=${calendarItems}, luckyDrops=${luckyDrops}, collectAllButtons=${collectAllButtons}.`);
+  log(`[${accountName}] ${stage} visible text excerpt: ${excerpt}`);
+
+  return { calendarItems, luckyDrops, collectAllButtons, text };
+}
+
+async function ensureGrowthCenterControls(page, accountName) {
+  let diagnostics = await logPageDiagnostics(page, accountName, "Initial page");
+  const hasControls = diagnostics.calendarItems > 0 || diagnostics.luckyDrops > 0 || diagnostics.collectAllButtons > 0;
+  if (hasControls || signInUrl === fallbackSignInUrl) {
+    return diagnostics;
+  }
+
+  log(`[${accountName}] Growth Center controls were not found on ${signInUrl}; trying fallback ${fallbackSignInUrl}.`);
+  await page.goto(fallbackSignInUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+  await dismissBlockingDialogs(page, accountName);
+  diagnostics = await logPageDiagnostics(page, accountName, "Fallback page");
+  return diagnostics;
 }
 
 async function dismissBlockingDialogs(page, accountName) {
@@ -379,8 +420,10 @@ async function signInWithContext(context, accountName) {
     return;
   }
 
-  const beforeText = await visibleText(page);
-  logVisibleStatus(accountName, "Before automation", beforeText);
+  await dismissBlockingDialogs(page, accountName);
+  const diagnostics = await ensureGrowthCenterControls(page, accountName);
+  const beforeText = diagnostics.text || await visibleText(page);
+  logReadableStatus(accountName, "Before automation", beforeText);
   if (/(Log In|Login|登入|登录|Sign Up|會員登入|会员登录)/i.test(beforeText) && !/(Total|累計|累计|Credits|積分|积分)/i.test(beforeText)) {
     throw new Error("Musicful is not logged in for this automation profile. Export a fresh storage state first.");
   }
@@ -388,7 +431,7 @@ async function signInWithContext(context, accountName) {
   if (/(already checked|already signed|已簽到|已签到|今日已|今天已|checked in today)/i.test(beforeText)) {
     log(`[${accountName}] Already signed in today.`);
     await claimAvailableRewards(page, accountName);
-    logVisibleStatus(accountName, "After automation", await visibleText(page));
+    logReadableStatus(accountName, "After automation", await visibleText(page));
     return;
   }
 
@@ -405,7 +448,7 @@ async function signInWithContext(context, accountName) {
     if (/(累計|累计|Total).{0,20}\d+/i.test(beforeText)) {
       log(`[${accountName}] Growth Center is reachable; it may already be signed in or the button text changed.`);
       await claimAvailableRewards(page, accountName);
-      logVisibleStatus(accountName, "After automation", await visibleText(page));
+      logReadableStatus(accountName, "After automation", await visibleText(page));
       return;
     }
     throw new Error("Could not find the Musicful sign-in action.");
@@ -427,7 +470,7 @@ async function signInWithContext(context, accountName) {
   log(`[${accountName}] Musicful sign-in finished.`);
   await claimAvailableRewards(page, accountName);
   const finalText = await visibleText(page);
-  logVisibleStatus(accountName, "After automation", finalText);
+  logReadableStatus(accountName, "After automation", finalText);
 }
 
 async function main() {
