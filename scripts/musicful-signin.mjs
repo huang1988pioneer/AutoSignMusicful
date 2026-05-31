@@ -467,7 +467,7 @@ async function signInWithContext(context, accountName) {
 
   if (exportStateMode) {
     await waitForLoggedInGrowthCenter(page, accountName);
-    const state = await context.storageState();
+    const state = await context.storageState({ indexedDB: true });
     const encoded = Buffer.from(JSON.stringify(state), "utf8").toString("base64");
     fs.writeFileSync(stateFile, `${encoded}\n`, { mode: 0o600 });
     log(`Storage state exported: ${stateFile}`);
