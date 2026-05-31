@@ -65,7 +65,7 @@ jobs:
 
           if (duplicates.length === 0) {
             console.log("No duplicate Musicful tokens found.");
-            return;
+            process.exit(0);
           }
 
           console.log("Duplicate Musicful token groups found:");
