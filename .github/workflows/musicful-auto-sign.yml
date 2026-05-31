@@ -3,12 +3,12 @@ name: Musicful Auto Sign
 on:
   workflow_dispatch:
   schedule:
-    - cron: "10 5 * * *"
+    - cron: "6,21,36,51 * * * *"
 
 jobs:
   signin:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,5 +29,8 @@ jobs:
         env:
           MUSICFUL_SECRETS_JSON: ${{ toJson(secrets) }}
           MUSICFUL_MAX_ACCOUNTS: "115"
+          MUSICFUL_SCHEDULE_MODE: "rolling"
+          MUSICFUL_SCHEDULE_START_UTC: "2026-05-31T05:06:00Z"
+          MUSICFUL_SCHEDULE_INTERVAL_MINUTES: "15"
           MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://www.musicful.ai/growth-center/' }}
         run: npm run signin

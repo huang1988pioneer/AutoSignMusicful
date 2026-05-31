@@ -14,6 +14,9 @@ const signInUrl = process.env.MUSICFUL_SIGNIN_URL || "https://www.musicful.ai/gr
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const storageStateBase64 = process.env.MUSICFUL_STORAGE_STATE_BASE64;
 const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS || "115", 10);
+const scheduledMode = process.env.MUSICFUL_SCHEDULE_MODE || "all";
+const scheduleStartUtc = process.env.MUSICFUL_SCHEDULE_START_UTC || "2026-05-31T05:06:00Z";
+const scheduleIntervalMinutes = Number.parseInt(process.env.MUSICFUL_SCHEDULE_INTERVAL_MINUTES || "15", 10);
 
 fs.mkdirSync(profileDir, { recursive: true });
 fs.mkdirSync(logDir, { recursive: true });
@@ -84,6 +87,46 @@ function collectStorageStates() {
   return [...states.entries()]
     .map(([name, value]) => ({ name, value, index: accountSortIndex(name) }))
     .sort((a, b) => a.index - b.index);
+}
+
+function accountSecretName(index) {
+  return index === 1 ? "MUSICFUL_STORAGE_STATE_BASE64" : `MUSICFUL_STORAGE_STATE_BASE64_${index}`;
+}
+
+function scheduledAccountIndex(now = new Date()) {
+  const start = new Date(scheduleStartUtc);
+  if (Number.isNaN(start.getTime())) {
+    throw new Error(`Invalid MUSICFUL_SCHEDULE_START_UTC: ${scheduleStartUtc}`);
+  }
+
+  const intervalMs = scheduleIntervalMinutes * 60 * 1000;
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+    throw new Error(`Invalid MUSICFUL_SCHEDULE_INTERVAL_MINUTES: ${scheduleIntervalMinutes}`);
+  }
+
+  const elapsedSlots = Math.floor((now.getTime() - start.getTime()) / intervalMs);
+  const normalizedSlot = ((elapsedSlots % maxAccounts) + maxAccounts) % maxAccounts;
+  return normalizedSlot + 1;
+}
+
+function selectScheduledStorageState(storageStates) {
+  if (scheduledMode !== "rolling") {
+    return storageStates;
+  }
+
+  const targetIndex = process.env.MUSICFUL_ACCOUNT_INDEX
+    ? Number.parseInt(process.env.MUSICFUL_ACCOUNT_INDEX, 10)
+    : scheduledAccountIndex();
+  const targetName = accountSecretName(targetIndex);
+  const target = storageStates.find((account) => account.name === targetName);
+
+  if (!target) {
+    log(`Scheduled account ${targetName} is not configured; skipping this run.`);
+    return [];
+  }
+
+  log(`Scheduled rolling mode selected ${targetName}.`);
+  return [target];
 }
 
 function parseStorageState(encoded, name) {
@@ -175,7 +218,7 @@ async function main() {
     timezoneId: "Asia/Taipei"
   };
 
-  const storageStates = collectStorageStates();
+  const storageStates = selectScheduledStorageState(collectStorageStates());
   if (storageStates.length > 0) {
     log(`Found ${storageStates.length} Musicful account storage state(s).`);
     const browser = await chromium.launch(browserOptions);
