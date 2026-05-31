@@ -68,6 +68,13 @@ async function dismissBlockingDialogs(page, accountName) {
   return true;
 }
 
+async function actionLabel(candidate) {
+  const text = (await candidate.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+  const aria = (await candidate.getAttribute("aria-label").catch(() => "")) || "";
+  const title = (await candidate.getAttribute("title").catch(() => "")) || "";
+  return `${text} ${aria} ${title}`.trim();
+}
+
 async function findAction(page) {
   const selectors = [
     "button",
@@ -83,16 +90,87 @@ async function findAction(page) {
     const candidates = await page.locator(selector).all();
     for (const candidate of candidates) {
       if (!(await candidate.isVisible().catch(() => false))) continue;
-      const text = (await candidate.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
-      const aria = (await candidate.getAttribute("aria-label").catch(() => "")) || "";
-      const title = (await candidate.getAttribute("title").catch(() => "")) || "";
-      const label = `${text} ${aria} ${title}`.trim();
+      const label = await actionLabel(candidate);
       if (!label || !positive.test(label) || negative.test(label)) continue;
       return { locator: candidate, label };
     }
   }
 
   return null;
+}
+
+async function clickWithDialogRetry(page, locator, accountName) {
+  try {
+    await locator.click({ timeout: 10_000 });
+  } catch (error) {
+    if (!/intercepts pointer events|element .* intercepts/i.test(error.message)) {
+      throw error;
+    }
+    await dismissBlockingDialogs(page, accountName);
+    await locator.click({ timeout: 10_000 });
+  }
+}
+
+async function clickFreeCreditsNavigation(page, accountName) {
+  const selectors = ["a", "button", "[role=button]", "div[tabindex]"];
+  const positive = /(賺取免費積分|赚取免费积分|免費積分|免费积分|Earn free credits|Free credits)/i;
+  const negative = /(API|立即購買|立即购买|購買|购买|Login|Log in|Sign up)/i;
+
+  for (const selector of selectors) {
+    const candidates = await page.locator(selector).all();
+    for (const candidate of candidates) {
+      if (!(await candidate.isVisible().catch(() => false))) continue;
+      const label = await actionLabel(candidate);
+      if (!label || !positive.test(label) || negative.test(label)) continue;
+      log(`[${accountName}] Opening free credits section: ${label}`);
+      await clickWithDialogRetry(page, candidate, accountName);
+      await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function findRewardAction(page) {
+  const selectors = ["button", "[role=button]", "a", "div[tabindex]", "span[tabindex]"];
+  const positive = /(領取|领取|可領|可领|獲得|获得|收取|Claim|Collect|Redeem|Get)/i;
+  const negative = /(立即購買|立即购买|購買|购买|付款|Subscribe|Upgrade|Pricing|API|登入|登录|Log in|Login|Sign up|已領|已领取|已獲得|已获得|已完成|Done|Completed|簽到|签到|Check[\s-]?in)/i;
+
+  for (const selector of selectors) {
+    const candidates = await page.locator(selector).all();
+    for (const candidate of candidates) {
+      if (!(await candidate.isVisible().catch(() => false))) continue;
+      const label = await actionLabel(candidate);
+      if (!label || !positive.test(label) || negative.test(label)) continue;
+      return { locator: candidate, label };
+    }
+  }
+
+  return null;
+}
+
+async function claimAvailableRewards(page, accountName) {
+  await dismissBlockingDialogs(page, accountName);
+  await clickFreeCreditsNavigation(page, accountName).catch((error) => {
+    log(`[${accountName}] Free credits navigation skipped: ${error.message}`);
+  });
+
+  let claimed = 0;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await dismissBlockingDialogs(page, accountName);
+    const reward = await findRewardAction(page);
+    if (!reward) break;
+
+    log(`[${accountName}] Claiming reward: ${reward.label}`);
+    await clickWithDialogRetry(page, reward.locator, accountName);
+    claimed += 1;
+    await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+  }
+
+  log(`[${accountName}] Reward claim scan finished. Claimed ${claimed} reward action(s).`);
 }
 
 function accountSortIndex(name) {
@@ -206,6 +284,7 @@ async function signInWithContext(context, accountName) {
 
   if (/(already checked|already signed|已簽到|已签到|今日已|今天已|checked in today)/i.test(beforeText)) {
     log(`[${accountName}] Already signed in today.`);
+    await claimAvailableRewards(page, accountName);
     return;
   }
 
@@ -218,21 +297,14 @@ async function signInWithContext(context, accountName) {
     log(`[${accountName}] No visible sign-in action was found. Screenshot saved: ${screenshot}`);
     if (/(累計|累计|Total).{0,20}\d+/i.test(beforeText)) {
       log(`[${accountName}] Growth Center is reachable; it may already be signed in or the button text changed.`);
+      await claimAvailableRewards(page, accountName);
       return;
     }
     throw new Error("Could not find the Musicful sign-in action.");
   }
 
   log(`[${accountName}] Clicking sign-in action: ${action.label}`);
-  try {
-    await action.locator.click({ timeout: 10_000 });
-  } catch (error) {
-    if (!/intercepts pointer events|element .* intercepts/i.test(error.message)) {
-      throw error;
-    }
-    await dismissBlockingDialogs(page, accountName);
-    await action.locator.click({ timeout: 10_000 });
-  }
+  await clickWithDialogRetry(page, action.locator, accountName);
   await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
   await page.waitForTimeout(3000);
 
@@ -245,6 +317,7 @@ async function signInWithContext(context, accountName) {
   }
 
   log(`[${accountName}] Musicful sign-in finished.`);
+  await claimAvailableRewards(page, accountName);
 }
 
 async function main() {
