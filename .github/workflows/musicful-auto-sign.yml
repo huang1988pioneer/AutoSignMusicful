@@ -8,11 +8,9 @@ on:
         required: false
         default: "all"
   schedule:
-    # New York time 01:07 and 13:07. Pairs cover daylight and standard time.
-    - cron: "7 5 * * *"
-    - cron: "7 6 * * *"
-    - cron: "7 17 * * *"
-    - cron: "7 18 * * *"
+    # Taiwan time: daily 05:07 and 17:07.
+    - cron: "7 21 * * *"
+    - cron: "7 9 * * *"
 
 permissions:
   contents: read
@@ -23,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      SHOULD_RUN_ACCOUNT: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.account_index == 'all' || github.event.inputs.account_index == format('{0}', matrix.account_index)) }}
+      SHOULD_RUN_ACCOUNT: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.account_index == 'all' || github.event.inputs.account_index == format('{0}', matrix.account_index))) }}
     strategy:
       fail-fast: false
       max-parallel: 11
@@ -52,48 +50,31 @@ jobs:
           - account_index: 11
             account_label: fengfence_fence
     steps:
-      - name: Check New York schedule
-        run: |
-          if [ "${{ github.event_name }}" != "schedule" ]; then
-            echo "SHOULD_RUN_SCHEDULE=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          ny_hour="$(TZ=America/New_York date +%H)"
-          ny_time="$(TZ=America/New_York date +%H:%M)"
-          if [ "$ny_hour" = "01" ] || [ "$ny_hour" = "13" ]; then
-            echo "New York schedule window matched: $ny_time"
-            echo "SHOULD_RUN_SCHEDULE=true" >> "$GITHUB_ENV"
-          else
-            echo "Skipping DST backup trigger at New York time: $ny_time"
-            echo "SHOULD_RUN_SCHEDULE=false" >> "$GITHUB_ENV"
-          fi
-
       - name: Skip unselected account
-        if: env.SHOULD_RUN_ACCOUNT != 'true' && env.SHOULD_RUN_SCHEDULE != 'true'
+        if: env.SHOULD_RUN_ACCOUNT != 'true'
         run: echo "Skipping ${{ matrix.account_label }}"
 
       - name: Checkout
-        if: env.SHOULD_RUN_ACCOUNT == 'true' || env.SHOULD_RUN_SCHEDULE == 'true'
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node
-        if: env.SHOULD_RUN_ACCOUNT == 'true' || env.SHOULD_RUN_SCHEDULE == 'true'
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
 
       - name: Install dependencies
-        if: env.SHOULD_RUN_ACCOUNT == 'true' || env.SHOULD_RUN_SCHEDULE == 'true'
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         run: npm ci
 
       - name: Install browser
-        if: env.SHOULD_RUN_ACCOUNT == 'true' || env.SHOULD_RUN_SCHEDULE == 'true'
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Musicful sign in
-        if: env.SHOULD_RUN_ACCOUNT == 'true' || env.SHOULD_RUN_SCHEDULE == 'true'
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         env:
           MUSICFUL_STORAGE_STATE_BASE64: ${{ matrix.account_index == 1 && secrets.MUSICFUL_STORAGE_STATE_BASE64 || secrets[format('MUSICFUL_STORAGE_STATE_BASE64_{0}', matrix.account_index)] }}
           MUSICFUL_ACCOUNT_INDEX: ${{ matrix.account_index }}
