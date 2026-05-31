@@ -3,12 +3,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const args = new Set(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = new Set(rawArgs);
 const headed = args.has("--headed") || args.has("--setup");
 const setupMode = args.has("--setup");
 const exportStateMode = args.has("--export-state");
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const profileDir = path.join(rootDir, ".musicful-profile");
+const profileArgIndex = rawArgs.findIndex((arg) => arg === "--profile");
+const profileArgValue = rawArgs.find((arg) => arg.startsWith("--profile="))?.slice("--profile=".length)
+  || (profileArgIndex >= 0 ? rawArgs[profileArgIndex + 1] : "");
+const profileName = (profileArgValue || process.env.MUSICFUL_PROFILE_NAME || "").replace(/[^A-Za-z0-9_-]/g, "-");
+const profileDir = profileName
+  ? path.join(rootDir, `.musicful-profile-${profileName}`)
+  : path.join(rootDir, ".musicful-profile");
 const logDir = path.join(rootDir, "logs");
 const stateFile = path.join(logDir, "musicful-storage-state.base64");
 const signInUrl = process.env.MUSICFUL_SIGNIN_URL || "https://tw.musicful.ai/growth-center/";
