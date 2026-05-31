@@ -94,11 +94,14 @@ async function logPageDiagnostics(page, accountName, stage) {
 async function ensureGrowthCenterControls(page, accountName) {
   let diagnostics = await logPageDiagnostics(page, accountName, "Initial page");
   const hasControls = diagnostics.visibleCalendarItems > 0 || diagnostics.visibleLuckyDrops > 0 || diagnostics.visibleCollectAllButtons > 0;
-  if (hasControls || signInUrl === fallbackSignInUrl) {
+  const isGrowthCenter = page.url().includes("/growth-center");
+  const looksLoggedOut = /(Log In|Login|登入|註冊|Sign Up)/i.test(diagnostics.text)
+    && !/(已獲得成長積分|累計|音樂點|Growth Points|Streak)/i.test(diagnostics.text);
+  if ((hasControls && isGrowthCenter && !looksLoggedOut) || signInUrl === fallbackSignInUrl) {
     return diagnostics;
   }
 
-  log(`[${accountName}] Growth Center controls were not found on ${signInUrl}; trying fallback ${fallbackSignInUrl}.`);
+  log(`[${accountName}] Growth Center is not ready on ${signInUrl}; trying fallback ${fallbackSignInUrl}.`);
   await page.goto(fallbackSignInUrl, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
   await dismissBlockingDialogs(page, accountName);
