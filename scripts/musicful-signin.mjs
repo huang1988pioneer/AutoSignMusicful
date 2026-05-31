@@ -109,6 +109,13 @@ async function ensureGrowthCenterControls(page, accountName) {
   return diagnostics;
 }
 
+function isLoggedOutGrowthCenterPage(page, text) {
+  const hasLoginPrompt = /(Log In|Login|登入|註冊|Sign Up)/i.test(text);
+  const hasAccountStatus = /(已獲得成長積分|簽到點亮|累計\s*[:：]\s*\d+\s*天|\d+\s*\/\s*\d+\s*音樂點|Earned Growth|Growth Points|Streak)/i.test(text);
+  const isHomePage = page.url().includes("/home/");
+  return hasLoginPrompt && (isHomePage || !hasAccountStatus);
+}
+
 async function dismissBlockingDialogs(page, accountName) {
   const dialogs = page.locator(".el-overlay-dialog, .pricing-confirm-dialog, [role='dialog'][aria-modal='true']");
   const visibleDialogs = await dialogs.count().catch(() => 0);
@@ -449,6 +456,9 @@ async function signInWithContext(context, accountName) {
   const diagnostics = await ensureGrowthCenterControls(page, accountName);
   const beforeText = diagnostics.text || await visibleText(page);
   logReadableStatus(accountName, "Before automation", beforeText);
+  if (isLoggedOutGrowthCenterPage(page, beforeText)) {
+    throw new Error("Musicful storage state is logged out or expired. Export a fresh storage state after logging in, then update this account secret.");
+  }
   if (/(Log In|Login|登入|登录|Sign Up|會員登入|会员登录)/i.test(beforeText) && !/(Total|累計|累计|Credits|積分|积分)/i.test(beforeText)) {
     throw new Error("Musicful is not logged in for this automation profile. Export a fresh storage state first.");
   }
