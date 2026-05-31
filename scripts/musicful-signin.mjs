@@ -155,31 +155,83 @@ async function findRewardAction(page) {
   return null;
 }
 
-async function claimAvailableRewards(page, accountName) {
-  await dismissBlockingDialogs(page, accountName);
-  await clickFreeCreditsNavigation(page, accountName).catch((error) => {
-    log(`[${accountName}] Free credits navigation skipped: ${error.message}`);
-  });
+async function findSpecificAction(page, positive, { includePlainDivs = false } = {}) {
+  const selectors = includePlainDivs
+    ? ["button", "[role=button]", "a", "div", "span[tabindex]"]
+    : ["button", "[role=button]", "a", "div[tabindex]", "span[tabindex]"];
+  const unsafeTarget = /(order-api|cart|checkout|pricing|subscribe|plan|payment)/i;
+  const negative = /(立即購買|立即购买|購買|购买|付款|Subscribe|Upgrade|Pricing|Deal|Get Started|API|登入|登录|Log in|Login|Sign up)/i;
 
-  let claimed = 0;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    await dismissBlockingDialogs(page, accountName);
-    const reward = await findRewardAction(page);
-    if (!reward) break;
-
-    log(`[${accountName}] Claiming reward: ${reward.label}`);
-    try {
-      await clickWithDialogRetry(page, reward.locator, accountName);
-    } catch (error) {
-      log(`[${accountName}] Reward claim skipped after click failure: ${error.message}`);
-      break;
+  for (const selector of selectors) {
+    const candidates = await page.locator(selector).all();
+    for (const candidate of candidates) {
+      if (!(await candidate.isVisible().catch(() => false))) continue;
+      const label = await actionLabel(candidate);
+      const href = (await candidate.getAttribute("href").catch(() => "")) || "";
+      const className = (await candidate.getAttribute("class").catch(() => "")) || "";
+      if (!label || !positive.test(label) || negative.test(label)) continue;
+      if (unsafeTarget.test(`${href} ${className}`)) continue;
+      return { locator: candidate, label };
     }
-    claimed += 1;
-    await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
-    await page.waitForTimeout(1500);
   }
 
-  log(`[${accountName}] Reward claim scan finished. Claimed ${claimed} reward action(s).`);
+  return null;
+}
+
+async function claimLuckyDrop(page, accountName) {
+  await dismissBlockingDialogs(page, accountName);
+  const action = await findSpecificAction(page, /(幸運掉落|幸运掉落|Lucky drop|2\s*天|7\s*天|14\s*天|21\s*天|整月)/i, {
+    includePlainDivs: true
+  });
+
+  if (!action) {
+    log(`[${accountName}] No lucky drop action found.`);
+    return false;
+  }
+
+  log(`[${accountName}] Claiming lucky drop: ${action.label}`);
+  try {
+    await clickWithDialogRetry(page, action.locator, accountName);
+  } catch (error) {
+    log(`[${accountName}] Lucky drop claim skipped after click failure: ${error.message}`);
+    return false;
+  }
+  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+  await page.waitForTimeout(1500);
+  return true;
+}
+
+async function claimAllPoints(page, accountName) {
+  await dismissBlockingDialogs(page, accountName);
+  await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
+  await page.waitForTimeout(500);
+
+  const action = await findSpecificAction(page, /(領取全部積分|领取全部积分|Claim all points|Claim all credits|Collect all)/i);
+  if (!action) {
+    log(`[${accountName}] No claim-all-points action found.`);
+    return false;
+  }
+
+  log(`[${accountName}] Claiming all points: ${action.label}`);
+  try {
+    await clickWithDialogRetry(page, action.locator, accountName);
+  } catch (error) {
+    log(`[${accountName}] Claim-all-points skipped after click failure: ${error.message}`);
+    return false;
+  }
+  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+  await page.waitForTimeout(1500);
+  return true;
+}
+
+async function claimAvailableRewards(page, accountName) {
+  log(`[${accountName}] Waiting 10 seconds before lucky drop claim.`);
+  await page.waitForTimeout(10_000);
+  await claimLuckyDrop(page, accountName);
+
+  log(`[${accountName}] Waiting 20 seconds before claiming all points.`);
+  await page.waitForTimeout(20_000);
+  await claimAllPoints(page, accountName);
 }
 
 function accountSortIndex(name) {
