@@ -35,7 +35,7 @@ async function visibleText(page) {
 }
 
 async function dismissBlockingDialogs(page, accountName) {
-  const dialogs = page.locator(".el-overlay-dialog, [role='dialog'][aria-modal='true']");
+  const dialogs = page.locator(".el-overlay-dialog, .pricing-confirm-dialog, [role='dialog'][aria-modal='true']");
   const visibleDialogs = await dialogs.count().catch(() => 0);
   if (visibleDialogs === 0) return false;
 
@@ -135,14 +135,18 @@ async function clickFreeCreditsNavigation(page, accountName) {
 
 async function findRewardAction(page) {
   const selectors = ["button", "[role=button]", "a", "div[tabindex]", "span[tabindex]"];
-  const positive = /(領取|领取|可領|可领|獲得|获得|收取|Claim|Collect|Redeem|Get)/i;
-  const negative = /(立即購買|立即购买|購買|购买|付款|Subscribe|Upgrade|Pricing|API|登入|登录|Log in|Login|Sign up|已領|已领取|已獲得|已获得|已完成|Done|Completed|簽到|签到|Check[\s-]?in)/i;
+  const positive = /(領取|领取|可領|可领|獲得|获得|收取|Claim|Collect|Redeem)/i;
+  const negative = /(立即購買|立即购买|購買|购买|付款|Subscribe|Upgrade|Pricing|Deal|Get Started|API|登入|登录|Log in|Login|Sign up|已領|已领取|已獲得|已获得|已完成|Done|Completed|簽到|签到|Check[\s-]?in)/i;
+  const unsafeTarget = /(order-api|cart|checkout|pricing|subscribe|plan|payment)/i;
 
   for (const selector of selectors) {
     const candidates = await page.locator(selector).all();
     for (const candidate of candidates) {
       if (!(await candidate.isVisible().catch(() => false))) continue;
       const label = await actionLabel(candidate);
+      const href = (await candidate.getAttribute("href").catch(() => "")) || "";
+      const className = (await candidate.getAttribute("class").catch(() => "")) || "";
+      if (unsafeTarget.test(`${href} ${className}`)) continue;
       if (!label || !positive.test(label) || negative.test(label)) continue;
       return { locator: candidate, label };
     }
@@ -164,7 +168,12 @@ async function claimAvailableRewards(page, accountName) {
     if (!reward) break;
 
     log(`[${accountName}] Claiming reward: ${reward.label}`);
-    await clickWithDialogRetry(page, reward.locator, accountName);
+    try {
+      await clickWithDialogRetry(page, reward.locator, accountName);
+    } catch (error) {
+      log(`[${accountName}] Reward claim skipped after click failure: ${error.message}`);
+      break;
+    }
     claimed += 1;
     await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
     await page.waitForTimeout(1500);
