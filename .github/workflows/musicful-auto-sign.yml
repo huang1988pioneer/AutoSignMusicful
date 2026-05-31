@@ -2,11 +2,47 @@ name: Musicful Auto Sign
 
 on:
   workflow_dispatch:
+    inputs:
+      account_index:
+        description: "Musicful account index to sign in"
+        required: false
+        default: "1"
   schedule:
     - cron: "6,21,36,51 * * * *"
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
+  dispatch-scheduled-account:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch scheduled account
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MUSICFUL_MAX_ACCOUNTS: "115"
+          MUSICFUL_SCHEDULE_START_UTC: "2026-05-31T05:06:00Z"
+          MUSICFUL_SCHEDULE_INTERVAL_MINUTES: "15"
+        run: |
+          node - <<'NODE' >> "$GITHUB_ENV"
+          const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS, 10);
+          const start = new Date(process.env.MUSICFUL_SCHEDULE_START_UTC);
+          const intervalMs = Number.parseInt(process.env.MUSICFUL_SCHEDULE_INTERVAL_MINUTES, 10) * 60 * 1000;
+          const elapsedSlots = Math.floor((Date.now() - start.getTime()) / intervalMs);
+          const accountIndex = (((elapsedSlots % maxAccounts) + maxAccounts) % maxAccounts) + 1;
+          console.log(`MUSICFUL_ACCOUNT_INDEX=${accountIndex}`);
+          NODE
+
+          gh workflow run musicful-auto-sign.yml \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.ref_name }}" \
+            --field account_index="$MUSICFUL_ACCOUNT_INDEX"
+
   signin:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -27,9 +63,10 @@ jobs:
 
       - name: Musicful sign in
         env:
-          MUSICFUL_SECRETS_JSON: ${{ toJson(secrets) }}
+          MUSICFUL_STORAGE_STATE_BASE64: ${{ inputs.account_index == '1' && secrets.MUSICFUL_STORAGE_STATE_BASE64 || secrets[format('MUSICFUL_STORAGE_STATE_BASE64_{0}', inputs.account_index)] }}
+          MUSICFUL_ACCOUNT_INDEX: ${{ inputs.account_index }}
           MUSICFUL_MAX_ACCOUNTS: "115"
-          MUSICFUL_SCHEDULE_MODE: "rolling"
+          MUSICFUL_SCHEDULE_MODE: "all"
           MUSICFUL_SCHEDULE_START_UTC: "2026-05-31T05:06:00Z"
           MUSICFUL_SCHEDULE_INTERVAL_MINUTES: "15"
           MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://www.musicful.ai/growth-center/' }}
