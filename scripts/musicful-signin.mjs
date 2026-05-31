@@ -35,6 +35,17 @@ async function visibleText(page) {
   return (await page.locator("body").innerText({ timeout: 10_000 })).replace(/\s+/g, " ");
 }
 
+async function visibleCount(locator) {
+  const candidates = await locator.all();
+  let count = 0;
+  for (const candidate of candidates) {
+    if (await candidate.isVisible().catch(() => false)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 function logVisibleStatus(accountName, stage, text) {
   const streak = text.match(/累計\s*[:：]\s*(\d+)\s*天/i)?.[1];
   const growthPoints = text.match(/已獲得成長積分\s*(\d+)/i)?.[1]
@@ -60,18 +71,29 @@ async function logPageDiagnostics(page, accountName, stage) {
   const calendarItems = await page.locator(".calendar-box .calendar-item").count().catch(() => 0);
   const luckyDrops = await page.locator(".continuous-check-box .flex-1").count().catch(() => 0);
   const collectAllButtons = await page.locator("button.collect-all-btn").count().catch(() => 0);
+  const visibleCalendarItems = await visibleCount(page.locator(".calendar-box .calendar-item")).catch(() => 0);
+  const visibleLuckyDrops = await visibleCount(page.locator(".continuous-check-box .flex-1")).catch(() => 0);
+  const visibleCollectAllButtons = await visibleCount(page.locator("button.collect-all-btn")).catch(() => 0);
   const text = await visibleText(page).catch(() => "");
   const excerpt = text.slice(0, 420);
 
-  log(`[${accountName}] ${stage} diagnostics: url=${page.url()}, calendarItems=${calendarItems}, luckyDrops=${luckyDrops}, collectAllButtons=${collectAllButtons}.`);
+  log(`[${accountName}] ${stage} diagnostics: url=${page.url()}, calendarItems=${calendarItems}/${visibleCalendarItems} visible, luckyDrops=${luckyDrops}/${visibleLuckyDrops} visible, collectAllButtons=${collectAllButtons}/${visibleCollectAllButtons} visible.`);
   log(`[${accountName}] ${stage} visible text excerpt: ${excerpt}`);
 
-  return { calendarItems, luckyDrops, collectAllButtons, text };
+  return {
+    calendarItems,
+    luckyDrops,
+    collectAllButtons,
+    visibleCalendarItems,
+    visibleLuckyDrops,
+    visibleCollectAllButtons,
+    text
+  };
 }
 
 async function ensureGrowthCenterControls(page, accountName) {
   let diagnostics = await logPageDiagnostics(page, accountName, "Initial page");
-  const hasControls = diagnostics.calendarItems > 0 || diagnostics.luckyDrops > 0 || diagnostics.collectAllButtons > 0;
+  const hasControls = diagnostics.visibleCalendarItems > 0 || diagnostics.visibleLuckyDrops > 0 || diagnostics.visibleCollectAllButtons > 0;
   if (hasControls || signInUrl === fallbackSignInUrl) {
     return diagnostics;
   }
