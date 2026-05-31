@@ -76,7 +76,8 @@ jobs:
       - name: Musicful sign in
         if: env.SHOULD_RUN_ACCOUNT == 'true'
         env:
-          MUSICFUL_STORAGE_STATE_BASE64: ${{ matrix.account_index == 1 && secrets.MUSICFUL_STORAGE_STATE_BASE64 || secrets[format('MUSICFUL_STORAGE_STATE_BASE64_{0}', matrix.account_index)] }}
+          MUSICFUL_STORAGE_STATE_BASE64: ${{ secrets[format('MUSICFUL_STORAGE_STATE_BASE64_{0}', matrix.account_index)] }}
+          MUSICFUL_ACCOUNT_SECRET_NAME: ${{ format('MUSICFUL_STORAGE_STATE_BASE64_{0}', matrix.account_index) }}
           MUSICFUL_ACCOUNT_INDEX: ${{ matrix.account_index }}
           MUSICFUL_MAX_ACCOUNTS: "11"
           MUSICFUL_SCHEDULE_MODE: "all"
