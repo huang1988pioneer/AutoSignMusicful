@@ -118,6 +118,25 @@ function isLoggedOutGrowthCenterPage(page, text) {
   return hasLoginPrompt && (isHomePage || !hasAccountStatus);
 }
 
+async function waitForLoggedInGrowthCenter(page, accountName) {
+  log(`[${accountName}] Export mode is open. Log in and open the Growth Center; this will export after the account status is visible.`);
+
+  const deadline = Date.now() + 5 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(3000);
+    await dismissBlockingDialogs(page, accountName);
+
+    const diagnostics = await logPageDiagnostics(page, accountName, "Export check");
+    const hasControls = diagnostics.visibleCalendarItems > 0 || diagnostics.visibleLuckyDrops > 0 || diagnostics.visibleCollectAllButtons > 0;
+    const hasStatus = /(已獲得成長積分|簽到點亮|累計\s*[:：]\s*\d+\s*天|\d+\s*\/\s*\d+\s*音樂點|Earned Growth|Growth Points|Streak)/i.test(diagnostics.text);
+    if (page.url().includes("/growth-center") && (hasControls || hasStatus) && !isLoggedOutGrowthCenterPage(page, diagnostics.text)) {
+      return;
+    }
+  }
+
+  throw new Error("Could not export Musicful storage state because the Growth Center never showed a logged-in account.");
+}
+
 async function dismissBlockingDialogs(page, accountName) {
   const dialogs = page.locator(".el-overlay-dialog, .pricing-confirm-dialog, [role='dialog'][aria-modal='true']");
   const visibleDialogs = await dialogs.count().catch(() => 0);
@@ -447,6 +466,7 @@ async function signInWithContext(context, accountName) {
   }
 
   if (exportStateMode) {
+    await waitForLoggedInGrowthCenter(page, accountName);
     const state = await context.storageState();
     const encoded = Buffer.from(JSON.stringify(state), "utf8").toString("base64");
     fs.writeFileSync(stateFile, `${encoded}\n`, { mode: 0o600 });
