@@ -34,6 +34,15 @@ async function visibleText(page) {
   return (await page.locator("body").innerText({ timeout: 10_000 })).replace(/\s+/g, " ");
 }
 
+function logVisibleStatus(accountName, stage, text) {
+  const streak = text.match(/累計\s*[:：]\s*(\d+)\s*天/i)?.[1];
+  const growthPoints = text.match(/已獲得成長積分\s*(\d+)/i)?.[1]
+    || text.match(/積分\s*[:：]\s*(\d+)/i)?.[1];
+  const musicPoints = text.match(/(\d+)\s*\/\s*\d+\s*音樂點/i)?.[1];
+
+  log(`[${accountName}] ${stage} status: 累計=${streak || "not found"} 天, 積分=${growthPoints || "not found"}, 音樂點=${musicPoints || "not found"}.`);
+}
+
 async function dismissBlockingDialogs(page, accountName) {
   const dialogs = page.locator(".el-overlay-dialog, .pricing-confirm-dialog, [role='dialog'][aria-modal='true']");
   const visibleDialogs = await dialogs.count().catch(() => 0);
@@ -83,8 +92,8 @@ async function findAction(page) {
     "div[tabindex]",
     "span[tabindex]"
   ];
-  const positive = /(簽到|签到|領取|领取|打卡|今日|Check[\s-]?in|Claim|Light up|Sign in to light)/i;
-  const negative = /(登入|登录|Log in|Login|Sign up|會員|会员|API)/i;
+  const positive = /(簽到|签到|打卡|今日|Check[\s-]?in|Light up|Sign in to light)/i;
+  const negative = /(領取全部積分|领取全部积分|領取|领取|Claim all|Collect all|登入|登录|Log in|Login|Sign up|會員|会员|API)/i;
 
   for (const selector of selectors) {
     const candidates = await page.locator(selector).all();
@@ -339,6 +348,7 @@ async function signInWithContext(context, accountName) {
   }
 
   const beforeText = await visibleText(page);
+  logVisibleStatus(accountName, "Before automation", beforeText);
   if (/(Log In|Login|登入|登录|Sign Up|會員登入|会员登录)/i.test(beforeText) && !/(Total|累計|累计|Credits|積分|积分)/i.test(beforeText)) {
     throw new Error("Musicful is not logged in for this automation profile. Export a fresh storage state first.");
   }
@@ -346,6 +356,7 @@ async function signInWithContext(context, accountName) {
   if (/(already checked|already signed|已簽到|已签到|今日已|今天已|checked in today)/i.test(beforeText)) {
     log(`[${accountName}] Already signed in today.`);
     await claimAvailableRewards(page, accountName);
+    logVisibleStatus(accountName, "After automation", await visibleText(page));
     return;
   }
 
@@ -359,6 +370,7 @@ async function signInWithContext(context, accountName) {
     if (/(累計|累计|Total).{0,20}\d+/i.test(beforeText)) {
       log(`[${accountName}] Growth Center is reachable; it may already be signed in or the button text changed.`);
       await claimAvailableRewards(page, accountName);
+      logVisibleStatus(accountName, "After automation", await visibleText(page));
       return;
     }
     throw new Error("Could not find the Musicful sign-in action.");
@@ -379,6 +391,8 @@ async function signInWithContext(context, accountName) {
 
   log(`[${accountName}] Musicful sign-in finished.`);
   await claimAvailableRewards(page, accountName);
+  const finalText = await visibleText(page);
+  logVisibleStatus(accountName, "After automation", finalText);
 }
 
 async function main() {
