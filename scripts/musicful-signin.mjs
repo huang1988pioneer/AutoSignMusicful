@@ -34,6 +34,40 @@ async function visibleText(page) {
   return (await page.locator("body").innerText({ timeout: 10_000 })).replace(/\s+/g, " ");
 }
 
+async function dismissBlockingDialogs(page, accountName) {
+  const dialogs = page.locator(".el-overlay-dialog, [role='dialog'][aria-modal='true']");
+  const visibleDialogs = await dialogs.count().catch(() => 0);
+  if (visibleDialogs === 0) return false;
+
+  const firstDialog = dialogs.first();
+  if (!(await firstDialog.isVisible().catch(() => false))) return false;
+
+  log(`[${accountName}] Dismissing blocking dialog overlay.`);
+  await page.keyboard.press("Escape").catch(() => {});
+  await page.waitForTimeout(500);
+
+  if (!(await firstDialog.isVisible().catch(() => false))) return true;
+
+  const closeButtons = page.locator([
+    ".el-overlay .el-dialog__headerbtn",
+    ".el-overlay .el-dialog__close",
+    ".el-overlay button[aria-label='Close']",
+    ".el-overlay button[title='Close']",
+    ".el-overlay [class*='close']"
+  ].join(","));
+
+  const count = await closeButtons.count().catch(() => 0);
+  for (let index = 0; index < count; index += 1) {
+    const closeButton = closeButtons.nth(index);
+    if (!(await closeButton.isVisible().catch(() => false))) continue;
+    await closeButton.click({ timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    return true;
+  }
+
+  return true;
+}
+
 async function findAction(page) {
   const selectors = [
     "button",
@@ -175,6 +209,8 @@ async function signInWithContext(context, accountName) {
     return;
   }
 
+  await dismissBlockingDialogs(page, accountName);
+
   const action = await findAction(page);
   if (!action) {
     const screenshot = screenshotPath(accountName);
@@ -188,7 +224,15 @@ async function signInWithContext(context, accountName) {
   }
 
   log(`[${accountName}] Clicking sign-in action: ${action.label}`);
-  await action.locator.click({ timeout: 10_000 });
+  try {
+    await action.locator.click({ timeout: 10_000 });
+  } catch (error) {
+    if (!/intercepts pointer events|element .* intercepts/i.test(error.message)) {
+      throw error;
+    }
+    await dismissBlockingDialogs(page, accountName);
+    await action.locator.click({ timeout: 10_000 });
+  }
   await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
   await page.waitForTimeout(3000);
 
