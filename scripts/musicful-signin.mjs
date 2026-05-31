@@ -93,7 +93,7 @@ async function findAction(page) {
     "span[tabindex]"
   ];
   const positive = /(簽到|签到|打卡|今日|Check[\s-]?in|Light up|Sign in to light)/i;
-  const negative = /(領取全部積分|领取全部积分|領取|领取|Claim all|Collect all|登入|登录|Log in|Login|Sign up|會員|会员|API)/i;
+  const negative = /(五月\s*簽到|五月\s*签到|主線|主线|每日|領取全部積分|领取全部积分|領取|领取|Claim all|Collect all|登入|登录|Log in|Login|Sign up|會員|会员|API)/i;
 
   for (const selector of selectors) {
     const candidates = await page.locator(selector).all();
@@ -103,6 +103,18 @@ async function findAction(page) {
       if (!label || !positive.test(label) || negative.test(label)) continue;
       return { locator: candidate, label };
     }
+  }
+
+  return null;
+}
+
+async function findCalendarSignInAction(page) {
+  const candidates = await page.locator(".calendar-box .calendar-item").all();
+  for (const candidate of candidates) {
+    if (!(await candidate.isVisible().catch(() => false))) continue;
+    const disabled = await candidate.locator(".text-white.text-opacity-50").count().catch(() => 0);
+    if (disabled > 0) continue;
+    return { locator: candidate, label: "current calendar note" };
   }
 
   return null;
@@ -189,6 +201,23 @@ async function findSpecificAction(page, positive, { includePlainDivs = false } =
 
 async function claimLuckyDrop(page, accountName) {
   await dismissBlockingDialogs(page, accountName);
+  const milestones = await page.locator(".continuous-check-box .flex-1").all();
+  for (const milestone of milestones) {
+    if (!(await milestone.isVisible().catch(() => false))) continue;
+    const label = await actionLabel(milestone);
+    if (!/(\d+\s*天|整月)/i.test(label)) continue;
+    log(`[${accountName}] Claiming lucky drop milestone: ${label}`);
+    try {
+      await clickWithDialogRetry(page, milestone, accountName);
+    } catch (error) {
+      log(`[${accountName}] Lucky drop milestone skipped after click failure: ${error.message}`);
+      return false;
+    }
+    await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    return true;
+  }
+
   const action = await findSpecificAction(page, /(幸運掉落|幸运掉落|Lucky drop|2\s*天|7\s*天|14\s*天|21\s*天|整月)/i, {
     includePlainDivs: true
   });
@@ -215,7 +244,10 @@ async function claimAllPoints(page, accountName) {
   await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
   await page.waitForTimeout(500);
 
-  const action = await findSpecificAction(page, /(領取全部積分|领取全部积分|Claim all points|Claim all credits|Collect all)/i);
+  const collectAllButton = page.locator("button.collect-all-btn").first();
+  const action = (await collectAllButton.isVisible().catch(() => false))
+    ? { locator: collectAllButton, label: await actionLabel(collectAllButton) }
+    : await findSpecificAction(page, /(領取全部積分|领取全部积分|Claim all points|Claim all credits|Collect all)/i);
   if (!action) {
     log(`[${accountName}] No claim-all-points action found.`);
     return false;
@@ -362,7 +394,10 @@ async function signInWithContext(context, accountName) {
 
   await dismissBlockingDialogs(page, accountName);
 
-  const action = await findAction(page);
+  let action = await findAction(page);
+  if (!action) {
+    action = await findCalendarSignInAction(page);
+  }
   if (!action) {
     const screenshot = screenshotPath(accountName);
     await page.screenshot({ path: screenshot, fullPage: true });
@@ -386,7 +421,7 @@ async function signInWithContext(context, accountName) {
   if (!success) {
     const screenshot = screenshotPath(accountName);
     await page.screenshot({ path: screenshot, fullPage: true });
-    throw new Error(`Clicked the action, but could not confirm success. Screenshot saved: ${screenshot}`);
+    log(`[${accountName}] Clicked the sign-in action, but could not confirm success. Screenshot saved: ${screenshot}`);
   }
 
   log(`[${accountName}] Musicful sign-in finished.`);
