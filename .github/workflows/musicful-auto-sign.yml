@@ -8,71 +8,78 @@ on:
         required: false
         default: "all"
   schedule:
-    - cron: "6,21,36,51 * * * *"
+    # Taiwan time: daily 05:06.
+    - cron: "6 21 * * *"
 
 permissions:
-  actions: write
   contents: read
 
 jobs:
-  dispatch-scheduled-account:
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Dispatch scheduled account
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MUSICFUL_MAX_ACCOUNTS: "115"
-          MUSICFUL_SCHEDULE_START_UTC: "2026-05-31T05:06:00Z"
-          MUSICFUL_SCHEDULE_INTERVAL_MINUTES: "15"
-        run: |
-          node - <<'NODE' >> "$GITHUB_ENV"
-          const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS, 10);
-          const start = new Date(process.env.MUSICFUL_SCHEDULE_START_UTC);
-          const intervalMs = Number.parseInt(process.env.MUSICFUL_SCHEDULE_INTERVAL_MINUTES, 10) * 60 * 1000;
-          const elapsedSlots = Math.floor((Date.now() - start.getTime()) / intervalMs);
-          const accountIndex = (((elapsedSlots % maxAccounts) + maxAccounts) % maxAccounts) + 1;
-          console.log(`MUSICFUL_ACCOUNT_INDEX=${accountIndex}`);
-          NODE
-
-          gh workflow run musicful-auto-sign.yml \
-            --repo "${{ github.repository }}" \
-            --ref "${{ github.ref_name }}" \
-            --field account_index="$MUSICFUL_ACCOUNT_INDEX"
-
   signin:
-    if: github.event_name == 'workflow_dispatch'
+    name: Sign in ${{ matrix.account_label }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      SHOULD_RUN_ACCOUNT: ${{ github.event_name == 'schedule' || github.event.inputs.account_index == 'all' || github.event.inputs.account_index == format('{0}', matrix.account_index) }}
     strategy:
       fail-fast: false
       max-parallel: 11
       matrix:
-        account_index: ${{ fromJson(inputs.account_index == 'all' && '[1,2,3,4,5,6,7,8,9,10,11]' || format('[{0}]', inputs.account_index)) }}
+        include:
+          - account_index: 1
+            account_label: goldshoot0720
+          - account_index: 2
+            account_label: abuhg17
+          - account_index: 3
+            account_label: fengtyprinfo
+          - account_index: 4
+            account_label: feng33feng35feng3
+          - account_index: 5
+            account_label: chbondg2
+          - account_index: 6
+            account_label: huang1988pioneer
+          - account_index: 7
+            account_label: chbondg_outloook
+          - account_index: 8
+            account_label: gaokaolevel3iptopscorer_outlook
+          - account_index: 9
+            account_label: huang1988pioneer_outloook
+          - account_index: 10
+            account_label: fengtuta_tuta
+          - account_index: 11
+            account_label: fengfence_fence
     steps:
+      - name: Skip unselected account
+        if: env.SHOULD_RUN_ACCOUNT != 'true'
+        run: echo "Skipping ${{ matrix.account_label }}"
+
       - name: Checkout
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
 
       - name: Install dependencies
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         run: npm ci
 
       - name: Install browser
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Musicful sign in
+        if: env.SHOULD_RUN_ACCOUNT == 'true'
         env:
           MUSICFUL_STORAGE_STATE_BASE64: ${{ matrix.account_index == 1 && secrets.MUSICFUL_STORAGE_STATE_BASE64 || secrets[format('MUSICFUL_STORAGE_STATE_BASE64_{0}', matrix.account_index)] }}
           MUSICFUL_ACCOUNT_INDEX: ${{ matrix.account_index }}
-          MUSICFUL_MAX_ACCOUNTS: "115"
+          MUSICFUL_MAX_ACCOUNTS: "11"
           MUSICFUL_SCHEDULE_MODE: "all"
-          MUSICFUL_SCHEDULE_START_UTC: "2026-05-31T05:06:00Z"
-          MUSICFUL_SCHEDULE_INTERVAL_MINUTES: "15"
+          MUSICFUL_SCHEDULE_START_UTC: "2026-05-30T21:06:00Z"
+          MUSICFUL_SCHEDULE_INTERVAL_MINUTES: "6"
           MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://www.musicful.ai/growth-center/' }}
         run: npm run signin
