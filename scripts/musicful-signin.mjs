@@ -1,19 +1,21 @@
 import { chromium } from "playwright";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const args = new Set(process.argv.slice(2));
 const headed = args.has("--headed") || args.has("--setup");
 const setupMode = args.has("--setup");
 const exportStateMode = args.has("--export-state");
-const rootDir = path.resolve(new URL("..", import.meta.url).pathname);
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const profileDir = path.join(rootDir, ".musicful-profile");
 const logDir = path.join(rootDir, "logs");
 const stateFile = path.join(logDir, "musicful-storage-state.base64");
 const signInUrl = process.env.MUSICFUL_SIGNIN_URL || "https://tw.musicful.ai/growth-center/";
 const fallbackSignInUrl = process.env.MUSICFUL_FALLBACK_SIGNIN_URL || "https://www.musicful.ai/growth-center/";
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const storageStateBase64 = process.env.MUSICFUL_STORAGE_STATE_BASE64;
+const storageStateBase64 = process.env.MUSICFUL_STORAGE_STATE_BASE64 || process.env.MUSICFUL_STORAGE_STATE_BASE64_1;
+const storageStateSecretName = process.env.MUSICFUL_ACCOUNT_SECRET_NAME || "MUSICFUL_STORAGE_STATE_BASE64_1";
 const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS || "115", 10);
 const scheduledMode = process.env.MUSICFUL_SCHEDULE_MODE || "all";
 const scheduleStartUtc = process.env.MUSICFUL_SCHEDULE_START_UTC || "2026-05-31T05:06:00Z";
@@ -349,7 +351,7 @@ async function claimAvailableRewards(page, accountName) {
 }
 
 function accountSortIndex(name) {
-  const match = name.match(/^MUSICFUL_STORAGE_STATE_BASE64(?:_(\d+))?$/);
+  const match = name.match(/^MUSICFUL_STORAGE_STATE_BASE64_(\d+)$/);
   return match?.[1] ? Number.parseInt(match[1], 10) : 1;
 }
 
@@ -357,13 +359,13 @@ function collectStorageStates() {
   const states = new Map();
 
   if (storageStateBase64) {
-    states.set("MUSICFUL_STORAGE_STATE_BASE64", storageStateBase64);
+    states.set(storageStateSecretName, storageStateBase64);
   }
 
   if (process.env.MUSICFUL_SECRETS_JSON) {
     const secrets = JSON.parse(process.env.MUSICFUL_SECRETS_JSON);
     for (const [name, value] of Object.entries(secrets)) {
-      const match = name.match(/^MUSICFUL_STORAGE_STATE_BASE64(?:_(\d+))?$/);
+      const match = name.match(/^MUSICFUL_STORAGE_STATE_BASE64_(\d+)$/);
       if (!match || !value) continue;
       const index = accountSortIndex(name);
       if (index < 1 || index > maxAccounts) continue;
@@ -377,7 +379,7 @@ function collectStorageStates() {
 }
 
 function accountSecretName(index) {
-  return index === 1 ? "MUSICFUL_STORAGE_STATE_BASE64" : `MUSICFUL_STORAGE_STATE_BASE64_${index}`;
+  return `MUSICFUL_STORAGE_STATE_BASE64_${index}`;
 }
 
 function scheduledAccountIndex(now = new Date()) {
