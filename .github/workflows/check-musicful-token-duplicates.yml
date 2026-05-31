@@ -1,0 +1,76 @@
+name: Check Musicful Token Duplicates
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check duplicate Musicful tokens
+        env:
+          TOKEN_1_LABEL: goldshoot0720
+          TOKEN_1: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64 }}
+          TOKEN_2_LABEL: abuhg17
+          TOKEN_2: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_2 }}
+          TOKEN_3_LABEL: fengtyprinfo
+          TOKEN_3: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_3 }}
+          TOKEN_4_LABEL: feng33feng35feng3
+          TOKEN_4: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_4 }}
+          TOKEN_5_LABEL: chbondg2
+          TOKEN_5: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_5 }}
+          TOKEN_6_LABEL: huang1988pioneer
+          TOKEN_6: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_6 }}
+          TOKEN_7_LABEL: chbondg_outloook
+          TOKEN_7: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_7 }}
+          TOKEN_8_LABEL: gaokaolevel3iptopscorer_outlook
+          TOKEN_8: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_8 }}
+          TOKEN_9_LABEL: huang1988pioneer_outloook
+          TOKEN_9: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_9 }}
+          TOKEN_10_LABEL: fengtuta_tuta
+          TOKEN_10: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_10 }}
+          TOKEN_11_LABEL: fengfence_fence
+          TOKEN_11: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_11 }}
+        run: |
+          node <<'NODE'
+          const crypto = require("node:crypto");
+
+          const seen = new Map();
+          const missing = [];
+
+          for (let index = 1; index <= 11; index += 1) {
+            const label = process.env[`TOKEN_${index}_LABEL`];
+            const value = (process.env[`TOKEN_${index}`] || "").trim();
+
+            if (!value) {
+              missing.push(`${index}:${label}`);
+              continue;
+            }
+
+            const hash = crypto.createHash("sha256").update(value, "utf8").digest("hex");
+            if (!seen.has(hash)) {
+              seen.set(hash, []);
+            }
+            seen.get(hash).push(`${index}:${label}`);
+          }
+
+          const duplicates = [...seen.values()].filter((group) => group.length > 1);
+          if (missing.length > 0) {
+            console.log(`Missing tokens: ${missing.join(", ")}`);
+          }
+
+          if (duplicates.length === 0) {
+            console.log("No duplicate Musicful tokens found.");
+            return;
+          }
+
+          console.log("Duplicate Musicful token groups found:");
+          for (const group of duplicates) {
+            console.log(`- ${group.join(" == ")}`);
+          }
+          process.exitCode = 1;
+          NODE
