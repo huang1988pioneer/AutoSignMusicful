@@ -49,6 +49,50 @@ jobs:
             account_label: fengtuta_tuta
           - account_index: 11
             account_label: fengfence_fence
+          - account_index: 12
+            account_label: account_12
+          - account_index: 13
+            account_label: account_13
+          - account_index: 14
+            account_label: account_14
+          - account_index: 15
+            account_label: account_15
+          - account_index: 16
+            account_label: account_16
+          - account_index: 17
+            account_label: account_17
+          - account_index: 18
+            account_label: account_18
+          - account_index: 19
+            account_label: account_19
+          - account_index: 20
+            account_label: account_20
+          - account_index: 21
+            account_label: account_21
+          - account_index: 22
+            account_label: account_22
+          - account_index: 23
+            account_label: account_23
+          - account_index: 24
+            account_label: account_24
+          - account_index: 25
+            account_label: account_25
+          - account_index: 26
+            account_label: account_26
+          - account_index: 27
+            account_label: account_27
+          - account_index: 28
+            account_label: account_28
+          - account_index: 29
+            account_label: account_29
+          - account_index: 30
+            account_label: account_30
+          - account_index: 31
+            account_label: account_31
+          - account_index: 32
+            account_label: account_32
+          - account_index: 33
+            account_label: account_33
     steps:
       - name: Skip unselected account
         if: env.SHOULD_RUN_ACCOUNT != 'true'
@@ -79,7 +123,7 @@ jobs:
           MUSICFUL_STORAGE_STATE_BASE64: ${{ secrets[format('MUSICFUL_STORAGE_STATE_BASE64_{0}', matrix.account_index)] }}
           MUSICFUL_ACCOUNT_SECRET_NAME: ${{ format('MUSICFUL_STORAGE_STATE_BASE64_{0}', matrix.account_index) }}
           MUSICFUL_ACCOUNT_INDEX: ${{ matrix.account_index }}
-          MUSICFUL_MAX_ACCOUNTS: "11"
+          MUSICFUL_MAX_ACCOUNTS: "33"
           MUSICFUL_SCHEDULE_MODE: "all"
           MUSICFUL_SCHEDULE_START_UTC: "2026-05-30T21:06:00Z"
           MUSICFUL_SCHEDULE_INTERVAL_MINUTES: "6"
