@@ -8,9 +8,9 @@ on:
         required: false
         default: "all"
   schedule:
-    # Taiwan time: daily 05:07 and 17:07.
-    - cron: "7 21 * * *"
-    - cron: "7 9 * * *"
+    # Taiwan time: daily 05:06 and 17:06.
+    - cron: "6 21 * * *"
+    - cron: "6 9 * * *"
 
 permissions:
   contents: read

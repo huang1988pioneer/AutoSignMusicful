@@ -69,16 +69,14 @@ MUSICFUL_STORAGE_STATE_BASE64_33
 
 每個 secret 放一個帳號匯出的 `logs/musicful-storage-state.base64` 內容。
 
-workflow 會從 UTC 05:06 開始，每 15 分鐘跑一個帳號：
+workflow 會每天跑兩次所有已設定帳號：
 
 ```text
-05:06 MUSICFUL_STORAGE_STATE_BASE64
-05:21 MUSICFUL_STORAGE_STATE_BASE64_2
-05:36 MUSICFUL_STORAGE_STATE_BASE64_3
-05:51 MUSICFUL_STORAGE_STATE_BASE64_4
+台灣時間 05:06
+台灣時間 17:06
 ```
 
-後續帳號依此輪轉到 `MUSICFUL_STORAGE_STATE_BASE64_33`。你也可以在 GitHub Actions 頁面手動按 `Run workflow` 測試。
+每次會依照 matrix 執行到 `MUSICFUL_STORAGE_STATE_BASE64_33`。你也可以在 GitHub Actions 頁面手動按 `Run workflow` 測試。
 
 ## 自訂網址
 
