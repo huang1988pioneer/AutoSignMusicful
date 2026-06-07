@@ -23,7 +23,7 @@ const fallbackSignInUrl = process.env.MUSICFUL_FALLBACK_SIGNIN_URL || "https://w
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const storageStateBase64 = process.env.MUSICFUL_STORAGE_STATE_BASE64 || process.env.MUSICFUL_STORAGE_STATE_BASE64_1;
 const storageStateSecretName = process.env.MUSICFUL_ACCOUNT_SECRET_NAME || "MUSICFUL_STORAGE_STATE_BASE64_1";
-const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS || "33", 10);
+const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS || "115", 10);
 const scheduledMode = process.env.MUSICFUL_SCHEDULE_MODE || "all";
 const scheduleStartUtc = process.env.MUSICFUL_SCHEDULE_START_UTC || "2026-05-31T05:06:00Z";
 const scheduleIntervalMinutes = Number.parseInt(process.env.MUSICFUL_SCHEDULE_INTERVAL_MINUTES || "15", 10);
@@ -103,10 +103,9 @@ async function logPageDiagnostics(page, accountName, stage) {
 async function ensureGrowthCenterControls(page, accountName) {
   let diagnostics = await logPageDiagnostics(page, accountName, "Initial page");
   const hasControls = diagnostics.visibleCalendarItems > 0 || diagnostics.visibleLuckyDrops > 0 || diagnostics.visibleCollectAllButtons > 0;
-  const isGrowthCenter = page.url().includes("/growth-center");
   const looksLoggedOut = /(Log In|Login|登入|註冊|Sign Up)/i.test(diagnostics.text)
     && !/(已獲得成長積分|累計|音樂點|Growth Points|Streak)/i.test(diagnostics.text);
-  if ((hasControls && isGrowthCenter && !looksLoggedOut) || signInUrl === fallbackSignInUrl) {
+  if ((hasControls && !looksLoggedOut) || signInUrl === fallbackSignInUrl) {
     return diagnostics;
   }
 
@@ -136,7 +135,8 @@ async function waitForLoggedInGrowthCenter(page, accountName) {
     const diagnostics = await logPageDiagnostics(page, accountName, "Export check");
     const hasControls = diagnostics.visibleCalendarItems > 0 || diagnostics.visibleLuckyDrops > 0 || diagnostics.visibleCollectAllButtons > 0;
     const hasStatus = /(已獲得成長積分|簽到點亮|累計\s*[:：]\s*\d+\s*天|\d+\s*\/\s*\d+\s*音樂點|Earned Growth|Growth Points|Streak)/i.test(diagnostics.text);
-    if (page.url().includes("/growth-center") && (hasControls || hasStatus) && !isLoggedOutGrowthCenterPage(page, diagnostics.text)) {
+    if ((hasControls || hasStatus) && !isLoggedOutGrowthCenterPage(page, diagnostics.text)) {
+      log(`[${accountName}] Logged-in Growth Center state detected; exporting storage state.`);
       return;
     }
   }
