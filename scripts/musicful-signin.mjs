@@ -201,6 +201,7 @@ async function findAction(page) {
     for (const candidate of candidates) {
       if (!(await candidate.isVisible().catch(() => false))) continue;
       const label = await actionLabel(candidate);
+      if (/(主線|每日|六月|January|February|March|April|May|June|July|August|September|October|November|December)/i.test(label)) continue;
       if (!label || !positive.test(label) || negative.test(label)) continue;
       return { locator: candidate, label };
     }
@@ -222,15 +223,23 @@ async function findCalendarSignInAction(page) {
 }
 
 async function clickWithDialogRetry(page, locator, accountName) {
-  try {
-    await locator.click({ timeout: 10_000 });
-  } catch (error) {
-    if (!/intercepts pointer events|element .* intercepts/i.test(error.message)) {
-      throw error;
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await locator.click({ timeout: 10_000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!/intercepts pointer events|element .* intercepts|dialog|overlay/i.test(error.message)) {
+        throw error;
+      }
+      log(`[${accountName}] Click was blocked by an overlay; dismissing and retrying (${attempt}/3).`);
+      await dismissBlockingDialogs(page, accountName);
+      await page.waitForTimeout(700);
     }
-    await dismissBlockingDialogs(page, accountName);
-    await locator.click({ timeout: 10_000 });
   }
+
+  throw lastError;
 }
 
 async function clickFreeCreditsNavigation(page, accountName) {
