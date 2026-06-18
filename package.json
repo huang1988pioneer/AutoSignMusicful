@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "check:secrets": "node scripts/check-duplicate-musicful-secrets.mjs",
     "setup": "node scripts/musicful-signin.mjs --headed --setup",
     "export-state": "node scripts/musicful-signin.mjs --headed --export-state",
     "signin": "node scripts/musicful-signin.mjs",
