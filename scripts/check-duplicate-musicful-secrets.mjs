@@ -59,7 +59,7 @@ function remember(grouped, key, entry) {
 }
 
 function findDuplicates(grouped) {
-  return [...grouped.values()].filter((entries) => entries.length > 1);
+  return [...grouped.values()].filter((entries) => new Set(entries.map((entry) => entry.name)).size > 1);
 }
 
 function decodeStorageState(secret) {
@@ -73,7 +73,7 @@ function decodeStorageState(secret) {
 
 function isLikelyAuthKey(key) {
   return /(access|auth|bearer|credential|jwt|login|refresh|session|sid|token)/i.test(key)
-    && !/(_ga|_gcl|analytics|amplitude|clarity|facebook|fbp|fingerprint|intercom|mixpanel|tracking)/i.test(key);
+    && !/(_ga|_gcl|_uet|analytics|amplitude|clarity|facebook|fbp|fingerprint|intercom|mixpanel|tracking)/i.test(key);
 }
 
 function isLikelyTokenValue(value) {
