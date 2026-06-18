@@ -32,7 +32,7 @@ jobs:
       MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://tw.musicful.ai/growth-center/' }}
     strategy:
       fail-fast: false
-      max-parallel: 11
+      max-parallel: 1
       matrix:
         include:
           - account_index: 1
@@ -40,7 +40,7 @@ jobs:
           - account_index: 2
             account_label: abuhg17
           - account_index: 3
-            account_label: fengtyprinfo
+            account_label: fengtuprinfo
           - account_index: 4
             account_label: feng33feng35feng3
           - account_index: 5
