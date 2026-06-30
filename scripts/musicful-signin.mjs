@@ -29,6 +29,10 @@ const scheduledMode = process.env.MUSICFUL_SCHEDULE_MODE || "all";
 const scheduleStartUtc = process.env.MUSICFUL_SCHEDULE_START_UTC || "2026-05-31T05:06:00Z";
 const scheduleIntervalMinutes = Number.parseInt(process.env.MUSICFUL_SCHEDULE_INTERVAL_MINUTES || "15", 10);
 const exportTimeoutMinutes = Number.parseInt(process.env.MUSICFUL_EXPORT_TIMEOUT_MINUTES || "15", 10);
+const rawExportReadyDelaySeconds = Number.parseInt(process.env.MUSICFUL_EXPORT_READY_DELAY_SECONDS || "3", 10);
+const exportReadyDelaySeconds = Number.isFinite(rawExportReadyDelaySeconds) && rawExportReadyDelaySeconds >= 0
+  ? rawExportReadyDelaySeconds
+  : 3;
 
 fs.mkdirSync(profileDir, { recursive: true });
 fs.mkdirSync(logDir, { recursive: true });
@@ -143,6 +147,13 @@ async function waitForLoggedInGrowthCenter(page, accountName) {
       continue;
     }
     if ((hasControls || hasStatus) && !isLoggedOutGrowthCenterPage(page, diagnostics.text)) {
+      log(`[${accountName}] Logged-in Growth Center state detected; waiting ${exportReadyDelaySeconds} second(s) before export.`);
+      await page.waitForTimeout(exportReadyDelaySeconds * 1000);
+      const finalText = await visibleText(page).catch(() => "");
+      if (await hasVisibleLoginPrompt(page, finalText)) {
+        log(`[${accountName}] Login prompt reappeared after the ready delay; waiting for login to finish.`);
+        continue;
+      }
       log(`[${accountName}] Logged-in Growth Center state detected; exporting storage state.`);
       return;
     }
