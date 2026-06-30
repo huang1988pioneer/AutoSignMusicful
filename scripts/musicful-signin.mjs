@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +28,7 @@ const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS || "115", 
 const scheduledMode = process.env.MUSICFUL_SCHEDULE_MODE || "all";
 const scheduleStartUtc = process.env.MUSICFUL_SCHEDULE_START_UTC || "2026-05-31T05:06:00Z";
 const scheduleIntervalMinutes = Number.parseInt(process.env.MUSICFUL_SCHEDULE_INTERVAL_MINUTES || "15", 10);
+const exportTimeoutMinutes = Number.parseInt(process.env.MUSICFUL_EXPORT_TIMEOUT_MINUTES || "15", 10);
 
 fs.mkdirSync(profileDir, { recursive: true });
 fs.mkdirSync(logDir, { recursive: true });
@@ -125,9 +127,9 @@ function isLoggedOutGrowthCenterPage(page, text) {
 }
 
 async function waitForLoggedInGrowthCenter(page, accountName) {
-  log(`[${accountName}] Export mode is open. Log in and open the Growth Center; this will export after the account status is visible.`);
+  log(`[${accountName}] Export mode is open. Log in and open the Growth Center within ${exportTimeoutMinutes} minute(s); this will export after the account status is visible.`);
 
-  const deadline = Date.now() + 5 * 60 * 1000;
+  const deadline = Date.now() + exportTimeoutMinutes * 60 * 1000;
   while (Date.now() < deadline) {
     await page.waitForTimeout(3000);
     await dismissBlockingDialogs(page, accountName);
@@ -135,6 +137,11 @@ async function waitForLoggedInGrowthCenter(page, accountName) {
     const diagnostics = await logPageDiagnostics(page, accountName, "Export check");
     const hasControls = diagnostics.visibleCalendarItems > 0 || diagnostics.visibleLuckyDrops > 0 || diagnostics.visibleCollectAllButtons > 0;
     const hasStatus = /(已獲得成長積分|簽到點亮|累計\s*[:：]\s*\d+\s*天|\d+\s*\/\s*\d+\s*音樂點|Earned Growth|Growth Points|Streak)/i.test(diagnostics.text);
+    const loginPromptVisible = await hasVisibleLoginPrompt(page, diagnostics.text);
+    if (loginPromptVisible) {
+      log(`[${accountName}] Login prompt is still visible; waiting for login to finish.`);
+      continue;
+    }
     if ((hasControls || hasStatus) && !isLoggedOutGrowthCenterPage(page, diagnostics.text)) {
       log(`[${accountName}] Logged-in Growth Center state detected; exporting storage state.`);
       return;
@@ -142,6 +149,40 @@ async function waitForLoggedInGrowthCenter(page, accountName) {
   }
 
   throw new Error("Could not export Musicful storage state because the Growth Center never showed a logged-in account.");
+}
+
+async function hasVisibleLoginPrompt(page, text = "") {
+  const loginTextPattern = new RegExp([
+    "Log In",
+    "Login",
+    "Sign Up",
+    "\\u767b\\u5165",
+    "\\u4f7f\\u7528\\s*Google\\s*\\u7e7c\\u7e8c",
+    "\\u4f7f\\u7528\\s*Discord\\s*\\u7e7c\\u7e8c",
+    "\\u8f38\\u5165\\u4f60\\u7684\\u4fe1\\u7bb1"
+  ].join("|"), "i");
+
+  if (loginTextPattern.test(text)) {
+    return true;
+  }
+
+  const selectors = [
+    "input[type='email']",
+    "input[placeholder*='email' i]",
+    "input[placeholder*='信箱']",
+    ".third-login-text",
+    ".el-overlay input",
+    ".el-overlay [class*='login' i]"
+  ];
+
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    if (await locator.isVisible().catch(() => false)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function dismissBlockingDialogs(page, accountName) {
@@ -466,6 +507,26 @@ function screenshotPath(accountName) {
   return path.join(logDir, `musicful-signin-${stamp}-${safeName}.png`);
 }
 
+function copyToClipboard(value) {
+  const command = process.platform === "win32"
+    ? "clip.exe"
+    : process.platform === "darwin"
+      ? "pbcopy"
+      : null;
+
+  if (!command) {
+    return false;
+  }
+
+  const result = spawnSync(command, [], {
+    input: value,
+    encoding: "utf8",
+    windowsHide: true
+  });
+
+  return result.status === 0;
+}
+
 async function signInWithContext(context, accountName) {
   log(`[${accountName}] Opening ${signInUrl}`);
   const page = context.pages()[0] || await context.newPage();
@@ -487,6 +548,11 @@ async function signInWithContext(context, accountName) {
     const encoded = Buffer.from(JSON.stringify(state), "utf8").toString("base64");
     fs.writeFileSync(stateFile, `${encoded}\n`, { mode: 0o600 });
     log(`Storage state exported: ${stateFile}`);
+    if (copyToClipboard(encoded)) {
+      log("Storage state copied to clipboard.");
+    } else {
+      log("Storage state was not copied to clipboard; copy it from the exported file.");
+    }
     return;
   }
 
