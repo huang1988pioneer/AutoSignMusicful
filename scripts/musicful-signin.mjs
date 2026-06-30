@@ -139,6 +139,12 @@ async function waitForLoggedInGrowthCenter(page, accountName) {
   const deadline = Date.now() + exportTimeoutMinutes * 60 * 1000;
   while (Date.now() < deadline) {
     await page.waitForTimeout(3000);
+
+    if (await hasVisibleLoginPrompt(page)) {
+      log(`[${accountName}] Login prompt is visible; leaving focus alone while you finish login.`);
+      continue;
+    }
+
     await dismissBlockingDialogs(page, accountName);
 
     const diagnostics = await logPageDiagnostics(page, accountName, "Export check");
