@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   signin:
-    name: Sign in ${{ matrix.account_label }}
+    name: Sign in ${{ matrix.account_index }}/33 ${{ matrix.account_label }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -104,11 +104,11 @@ jobs:
     steps:
       - name: Skip unselected account
         if: env.SHOULD_RUN_ACCOUNT != 'true'
-        run: echo "Skipping ${{ matrix.account_label }}"
+        run: echo "Skipping ${{ matrix.account_index }}/33 ${{ matrix.account_label }}"
 
       - name: Skip missing storage state
         if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 == ''
-        run: echo "Skipping ${{ matrix.account_label }} because ${{ env.MUSICFUL_ACCOUNT_SECRET_NAME }} is not configured."
+        run: echo "Skipping ${{ matrix.account_index }}/33 ${{ matrix.account_label }} because ${{ env.MUSICFUL_ACCOUNT_SECRET_NAME }} is not configured."
 
       - name: Checkout
         if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
