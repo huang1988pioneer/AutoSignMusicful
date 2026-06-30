@@ -19,6 +19,9 @@ const profileDir = profileName
   : path.join(rootDir, ".musicful-profile");
 const logDir = path.join(rootDir, "logs");
 const stateFile = path.join(logDir, "musicful-storage-state.base64");
+const numberedStateFile = profileName
+  ? path.join(logDir, `musicful-storage-state-${profileName}.base64`)
+  : stateFile;
 const signInUrl = process.env.MUSICFUL_SIGNIN_URL || "https://tw.musicful.ai/growth-center/";
 const fallbackSignInUrl = process.env.MUSICFUL_FALLBACK_SIGNIN_URL || "https://www.musicful.ai/growth-center/";
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -558,7 +561,13 @@ async function signInWithContext(context, accountName) {
     const state = await context.storageState({ indexedDB: true });
     const encoded = Buffer.from(JSON.stringify(state), "utf8").toString("base64");
     fs.writeFileSync(stateFile, `${encoded}\n`, { mode: 0o600 });
+    if (numberedStateFile !== stateFile) {
+      fs.writeFileSync(numberedStateFile, `${encoded}\n`, { mode: 0o600 });
+    }
     log(`Storage state exported: ${stateFile}`);
+    if (numberedStateFile !== stateFile) {
+      log(`Numbered storage state exported: ${numberedStateFile}`);
+    }
     if (copyToClipboard(encoded)) {
       log("Storage state copied to clipboard.");
     } else {
