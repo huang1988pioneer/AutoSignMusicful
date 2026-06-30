@@ -32,7 +32,7 @@ jobs:
       MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://tw.musicful.ai/growth-center/' }}
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 33
       matrix:
         include:
           - account_index: 1
