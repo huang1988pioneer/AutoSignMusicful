@@ -32,7 +32,7 @@ jobs:
       MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://tw.musicful.ai/growth-center/' }}
     strategy:
       fail-fast: false
-      max-parallel: 33
+      max-parallel: 1
       matrix:
         include:
           - account_index: 1
@@ -128,6 +128,13 @@ jobs:
       - name: Install browser
         if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
         run: npx playwright install --with-deps chromium
+
+      - name: Random account delay
+        if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
+        run: |
+          delay=$(( 5 + RANDOM % 11 ))
+          echo "Waiting ${delay} second(s) before signing in ${{ matrix.account_index }}/33 ${{ matrix.account_label }}."
+          sleep "$delay"
 
       - name: Musicful sign in
         if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
