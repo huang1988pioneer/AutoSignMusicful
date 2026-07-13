@@ -82,7 +82,7 @@ function resolveAccountMeta(accountName) {
 
   return {
     account,
-    label: accountLabelFromEnv || null,
+    label: labelForIndex(account),
     name: accountName
   };
 }
@@ -519,9 +519,43 @@ function accountSortIndex(name) {
   return match?.[1] ? Number.parseInt(match[1], 10) : 1;
 }
 
+function loadAccountLabels() {
+  const raw = process.env.MUSICFUL_ACCOUNT_LABELS_JSON;
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    log(`MUSICFUL_ACCOUNT_LABELS_JSON is invalid JSON: ${error.message}`);
+    return {};
+  }
+}
+
+const accountLabels = loadAccountLabels();
+
+function labelForIndex(index) {
+  if (index == null) return accountLabelFromEnv || null;
+  return accountLabels[String(index)] || accountLabels[index] || accountLabelFromEnv || null;
+}
+
+function accountFilterIndex() {
+  const raw = process.env.MUSICFUL_ACCOUNT_FILTER || process.env.MUSICFUL_ACCOUNT_INDEX || "all";
+  if (!raw || raw === "all") return null;
+  const index = Number.parseInt(String(raw), 10);
+  return Number.isFinite(index) && index > 0 ? index : null;
+}
+
 function collectStorageStates() {
   const states = new Map();
 
+  // LitVideo-style: pick up MUSICFUL_STORAGE_STATE_BASE64_1..N from env.
+  for (let index = 1; index <= maxAccounts; index += 1) {
+    const name = accountSecretName(index);
+    const value = process.env[name];
+    if (value) states.set(name, value);
+  }
+
+  // Single-account alias used by local runs / older matrix workflow.
   if (storageStateBase64) {
     states.set(storageStateSecretName, storageStateBase64);
   }
@@ -537,9 +571,82 @@ function collectStorageStates() {
     }
   }
 
-  return [...states.entries()]
-    .map(([name, value]) => ({ name, value, index: accountSortIndex(name) }))
+  let accounts = [...states.entries()]
+    .map(([name, value]) => ({
+      name,
+      value,
+      index: accountSortIndex(name),
+      label: labelForIndex(accountSortIndex(name))
+    }))
     .sort((a, b) => a.index - b.index);
+
+  const onlyIndex = accountFilterIndex();
+  if (onlyIndex != null) {
+    accounts = accounts.filter((account) => account.index === onlyIndex);
+  }
+
+  return accounts;
+}
+
+function writeMissingSlotResults(ranIndexes) {
+  if (process.env.MUSICFUL_REPORT_ALL_SLOTS === "0") return;
+
+  const ran = new Set(ranIndexes);
+  const onlyIndex = accountFilterIndex();
+
+  for (let index = 1; index <= maxAccounts; index += 1) {
+    if (ran.has(index)) continue;
+
+    const name = accountSecretName(index);
+    const label = labelForIndex(index);
+
+    if (onlyIndex != null && index !== onlyIndex) {
+      writeSignInResult({
+        account: index,
+        label,
+        name,
+        status: "skipped",
+        message: "Account not selected for this workflow_dispatch run"
+      });
+      continue;
+    }
+
+    writeSignInResult({
+      account: index,
+      label,
+      name,
+      status: "skipped",
+      message: `Secret ${name} is not configured`
+    });
+  }
+}
+
+function runDailySummary() {
+  const summaryScript = path.join(rootDir, "scripts", "summarize-signin-results.mjs");
+  if (!fs.existsSync(summaryScript)) {
+    log("Summary script not found; skipping daily summary.");
+    return 0;
+  }
+
+  log("Building daily sign-in summary (LitVideo-style Job Summary)...");
+  const result = spawnSync(process.execPath, [summaryScript, resultDir], {
+    env: {
+      ...process.env,
+      MUSICFUL_SUMMARY_DIR: process.env.MUSICFUL_SUMMARY_DIR || resultDir,
+      MUSICFUL_EXPECTED_ACCOUNTS: String(maxAccounts)
+    },
+    encoding: "utf8",
+    stdio: "inherit"
+  });
+  return result.status ?? 1;
+}
+
+function randomDelayMs() {
+  const min = Number.parseInt(process.env.MUSICFUL_DELAY_MIN_MS || "5000", 10);
+  const max = Number.parseInt(process.env.MUSICFUL_DELAY_MAX_MS || "15000", 10);
+  const lo = Number.isFinite(min) ? Math.max(0, min) : 5000;
+  const hi = Number.isFinite(max) ? Math.max(lo, max) : 15000;
+  return lo + Math.floor(Math.random() * (hi - lo + 1));
 }
 
 function accountSecretName(index) {
@@ -739,19 +846,26 @@ async function main() {
   };
 
   const storageStates = selectScheduledStorageState(collectStorageStates());
-  if (storageStates.length > 0) {
+  if (storageStates.length > 0 || process.env.GITHUB_ACTIONS === "true" || process.env.MUSICFUL_AUTO_SUMMARY === "1") {
     log(`Found ${storageStates.length} Musicful account storage state(s).`);
-    const browser = await chromium.launch(browserOptions);
+    const browser = storageStates.length > 0 ? await chromium.launch(browserOptions) : null;
     let failures = 0;
     /** @type {ReturnType<typeof writeSignInResult>[]} */
     const results = [];
 
     try {
-      for (const account of storageStates) {
+      for (let i = 0; i < storageStates.length; i += 1) {
+        const account = storageStates[i];
         const meta = resolveAccountMeta(account.name);
         if (meta.account == null && account.index != null) {
           meta.account = account.index;
         }
+        if (account.label && !meta.label) {
+          meta.label = account.label;
+        }
+
+        log(`\n=== Account ${meta.account ?? "?"}: ${meta.label || account.name} ===`);
+
         const context = await browser.newContext({
           ...contextOptions,
           storageState: parseStorageState(account.value, account.name)
@@ -774,9 +888,31 @@ async function main() {
         } finally {
           await context.close();
         }
+
+        if (i < storageStates.length - 1) {
+          const delay = randomDelayMs();
+          log(`Waiting ${Math.round(delay / 1000)} second(s) before the next account.`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
       }
     } finally {
-      await browser.close();
+      if (browser) await browser.close();
+    }
+
+    const ranIndexes = results
+      .map((row) => row.account)
+      .filter((value) => value != null);
+    writeMissingSlotResults(ranIndexes);
+
+    const autoSummary =
+      process.env.MUSICFUL_AUTO_SUMMARY === "1"
+      || process.env.GITHUB_ACTIONS === "true"
+      || Boolean(process.env.GITHUB_STEP_SUMMARY);
+    if (autoSummary) {
+      const summaryCode = runDailySummary();
+      if (summaryCode !== 0 && failures === 0) {
+        process.exitCode = summaryCode;
+      }
     }
 
     if (failures > 0) {

@@ -80,22 +80,21 @@ workflow 會每天跑兩次所有已設定帳號：
 
 ### 每日匯總（Job Summary）
 
-每次 `Musicful Auto Sign` 跑完後，會有 `daily-summary` job（風格對齊 [AutoSignLitVideo](https://github.com/huang1988pioneer/AutoSignLitVideo)）：
+Workflow 與 [AutoSignLitVideo](https://github.com/huang1988pioneer/AutoSignLitVideo/actions/runs/29248744621) 相同模式：**單一 job** 依序跑完所有帳號後，直接寫入 GitHub **Job Summary**，並上傳報告 artifact。
 
-1. 下載各帳號的 `signin-result-*.json` artifact  
-2. 彙整成 **Job Summary** 與 markdown 報告，內容包含：  
-   - 總覽 headline（全部成功 / 需關注）  
-   - Metric 計數表（Configured / New check-in / Already done / Failed / Skipped）  
-   - 各帳號結果表（Status / Growth / Music / Streak / Note）  
-   - 失敗帳號清單、未設定 secret 的 skipped 編號  
-3. 寫入 GitHub Actions **Job Summary**（run 頁面最下方 Summary）  
-4. 上傳 artifact：`signin-daily-summary`（`.md` + `.json`）  
-5. 若有帳號 `failed`，summary job 會失敗方便一眼看出
+跑完後在 Actions run 頁面可看到：
+
+1. **Summary** 區塊（headline + Metric 表 + 各帳號 Status / Growth / Music / Streak）  
+2. Artifact：`musicful-signin-report`  
+   - `signin-daily-summary.md` / `.json`  
+   - 各帳號 `signin-result-N.json`  
+3. 未設定 secret 的槽位會標成 skipped（`#21–33` 等）  
+4. 有帳號 `failed` 時 job 會失敗，Summary 會列出需關注帳號  
 
 本機也可從結果資料夾重建匯總：
 
 ```bash
-npm run summary -- path/to/collected-results
+npm run summary -- path/to/artifacts
 ```
 
 ## 自訂網址

@@ -17,231 +17,83 @@ permissions:
 
 jobs:
   signin:
-    name: Sign in ${{ matrix.account_index }}/33 ${{ matrix.account_label }}
+    name: daily-signin
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 90
     env:
-      SHOULD_RUN_ACCOUNT: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.account_index == 'all' || github.event.inputs.account_index == format('{0}', matrix.account_index))) }}
-      MUSICFUL_STORAGE_STATE_BASE64: ${{ secrets[format('MUSICFUL_STORAGE_STATE_BASE64_{0}', matrix.account_index)] }}
-      MUSICFUL_ACCOUNT_SECRET_NAME: ${{ format('MUSICFUL_STORAGE_STATE_BASE64_{0}', matrix.account_index) }}
-      MUSICFUL_ACCOUNT_INDEX: ${{ matrix.account_index }}
-      MUSICFUL_ACCOUNT_LABEL: ${{ matrix.account_label }}
       MUSICFUL_MAX_ACCOUNTS: "33"
       MUSICFUL_SCHEDULE_MODE: "all"
-      MUSICFUL_SCHEDULE_START_UTC: "2026-05-30T21:06:00Z"
-      MUSICFUL_SCHEDULE_INTERVAL_MINUTES: "6"
-      MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://tw.musicful.ai/growth-center/' }}
       MUSICFUL_RESULT_DIR: artifacts
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          - account_index: 1
-            account_label: goldshoot0720
-          - account_index: 2
-            account_label: abuhg17
-          - account_index: 3
-            account_label: fengtuprinfo
-          - account_index: 4
-            account_label: feng33feng35feng3
-          - account_index: 5
-            account_label: chbondg2
-          - account_index: 6
-            account_label: huang1988pioneer
-          - account_index: 7
-            account_label: chbondg_outloook
-          - account_index: 8
-            account_label: gaokaolevel3iptopscorer_outlook
-          - account_index: 9
-            account_label: huang1988pioneer_outloook
-          - account_index: 10
-            account_label: fengtuta_tuta
-          - account_index: 11
-            account_label: fengfence_fence
-          - account_index: 12
-            account_label: samafengtu
-          - account_index: 13
-            account_label: fengtusama
-          - account_index: 14
-            account_label: fengwithting0831
-          - account_index: 15
-            account_label: fengwithfeng1127
-          - account_index: 16
-            account_label: fengwithtu1127
-          - account_index: 17
-            account_label: akaonda333
-          - account_index: 18
-            account_label: fbussinesseng
-          - account_index: 19
-            account_label: engdictatorf
-          - account_index: 20
-            account_label: flottojackpoteng
-          - account_index: 21
-            account_label: account_21
-          - account_index: 22
-            account_label: account_22
-          - account_index: 23
-            account_label: account_23
-          - account_index: 24
-            account_label: account_24
-          - account_index: 25
-            account_label: account_25
-          - account_index: 26
-            account_label: account_26
-          - account_index: 27
-            account_label: account_27
-          - account_index: 28
-            account_label: account_28
-          - account_index: 29
-            account_label: account_29
-          - account_index: 30
-            account_label: account_30
-          - account_index: 31
-            account_label: account_31
-          - account_index: 32
-            account_label: account_32
-          - account_index: 33
-            account_label: account_33
+      MUSICFUL_SUMMARY_DIR: artifacts
+      MUSICFUL_AUTO_SUMMARY: "1"
+      MUSICFUL_REPORT_ALL_SLOTS: "1"
+      MUSICFUL_ACCOUNT_FILTER: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.account_index || 'all' }}
+      MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://tw.musicful.ai/growth-center/' }}
+      MUSICFUL_DELAY_MIN_MS: ${{ vars.MUSICFUL_DELAY_MIN_MS || '5000' }}
+      MUSICFUL_DELAY_MAX_MS: ${{ vars.MUSICFUL_DELAY_MAX_MS || '15000' }}
+      # Labels mirror previous matrix names (shown in Job Summary).
+      MUSICFUL_ACCOUNT_LABELS_JSON: >-
+        {"1":"goldshoot0720","2":"abuhg17","3":"fengtuprinfo","4":"feng33feng35feng3","5":"chbondg2","6":"huang1988pioneer","7":"chbondg_outloook","8":"gaokaolevel3iptopscorer_outlook","9":"huang1988pioneer_outloook","10":"fengtuta_tuta","11":"fengfence_fence","12":"samafengtu","13":"fengtusama","14":"fengwithting0831","15":"fengwithfeng1127","16":"fengwithtu1127","17":"akaonda333","18":"fbussinesseng","19":"engdictatorf","20":"flottojackpoteng","21":"account_21","22":"account_22","23":"account_23","24":"account_24","25":"account_25","26":"account_26","27":"account_27","28":"account_28","29":"account_29","30":"account_30","31":"account_31","32":"account_32","33":"account_33"}
+      MUSICFUL_STORAGE_STATE_BASE64_1: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_1 }}
+      MUSICFUL_STORAGE_STATE_BASE64_2: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_2 }}
+      MUSICFUL_STORAGE_STATE_BASE64_3: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_3 }}
+      MUSICFUL_STORAGE_STATE_BASE64_4: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_4 }}
+      MUSICFUL_STORAGE_STATE_BASE64_5: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_5 }}
+      MUSICFUL_STORAGE_STATE_BASE64_6: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_6 }}
+      MUSICFUL_STORAGE_STATE_BASE64_7: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_7 }}
+      MUSICFUL_STORAGE_STATE_BASE64_8: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_8 }}
+      MUSICFUL_STORAGE_STATE_BASE64_9: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_9 }}
+      MUSICFUL_STORAGE_STATE_BASE64_10: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_10 }}
+      MUSICFUL_STORAGE_STATE_BASE64_11: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_11 }}
+      MUSICFUL_STORAGE_STATE_BASE64_12: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_12 }}
+      MUSICFUL_STORAGE_STATE_BASE64_13: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_13 }}
+      MUSICFUL_STORAGE_STATE_BASE64_14: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_14 }}
+      MUSICFUL_STORAGE_STATE_BASE64_15: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_15 }}
+      MUSICFUL_STORAGE_STATE_BASE64_16: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_16 }}
+      MUSICFUL_STORAGE_STATE_BASE64_17: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_17 }}
+      MUSICFUL_STORAGE_STATE_BASE64_18: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_18 }}
+      MUSICFUL_STORAGE_STATE_BASE64_19: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_19 }}
+      MUSICFUL_STORAGE_STATE_BASE64_20: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_20 }}
+      MUSICFUL_STORAGE_STATE_BASE64_21: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_21 }}
+      MUSICFUL_STORAGE_STATE_BASE64_22: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_22 }}
+      MUSICFUL_STORAGE_STATE_BASE64_23: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_23 }}
+      MUSICFUL_STORAGE_STATE_BASE64_24: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_24 }}
+      MUSICFUL_STORAGE_STATE_BASE64_25: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_25 }}
+      MUSICFUL_STORAGE_STATE_BASE64_26: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_26 }}
+      MUSICFUL_STORAGE_STATE_BASE64_27: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_27 }}
+      MUSICFUL_STORAGE_STATE_BASE64_28: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_28 }}
+      MUSICFUL_STORAGE_STATE_BASE64_29: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_29 }}
+      MUSICFUL_STORAGE_STATE_BASE64_30: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_30 }}
+      MUSICFUL_STORAGE_STATE_BASE64_31: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_31 }}
+      MUSICFUL_STORAGE_STATE_BASE64_32: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_32 }}
+      MUSICFUL_STORAGE_STATE_BASE64_33: ${{ secrets.MUSICFUL_STORAGE_STATE_BASE64_33 }}
     steps:
-      - name: Skip unselected account
-        if: env.SHOULD_RUN_ACCOUNT != 'true'
-        run: |
-          mkdir -p artifacts
-          cat > artifacts/signin-result.json <<EOF
-          {
-            "account": ${{ matrix.account_index }},
-            "label": "${{ matrix.account_label }}",
-            "name": "${{ env.MUSICFUL_ACCOUNT_SECRET_NAME }}",
-            "status": "skipped",
-            "message": "Account not selected for this workflow_dispatch run",
-            "streakDays": null,
-            "growthPoints": null,
-            "musicPoints": null,
-            "finishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "runId": "${{ github.run_id }}",
-            "job": "${{ github.job }}"
-          }
-          EOF
-
-      - name: Skip missing storage state
-        if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 == ''
-        run: |
-          mkdir -p artifacts
-          cat > artifacts/signin-result.json <<EOF
-          {
-            "account": ${{ matrix.account_index }},
-            "label": "${{ matrix.account_label }}",
-            "name": "${{ env.MUSICFUL_ACCOUNT_SECRET_NAME }}",
-            "status": "skipped",
-            "message": "Secret ${{ env.MUSICFUL_ACCOUNT_SECRET_NAME }} is not configured",
-            "streakDays": null,
-            "growthPoints": null,
-            "musicPoints": null,
-            "finishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "runId": "${{ github.run_id }}",
-            "job": "${{ github.job }}"
-          }
-          EOF
-          echo "Skipping ${{ matrix.account_index }}/33 ${{ matrix.account_label }} because ${{ env.MUSICFUL_ACCOUNT_SECRET_NAME }} is not configured."
-
       - name: Checkout
-        if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
         uses: actions/checkout@v4
 
       - name: Setup Node
-        if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
-        if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
         run: npm ci
 
       - name: Install browser
-        if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
         run: npx playwright install --with-deps chromium
 
-      - name: Random account delay
-        if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
-        run: |
-          delay=$(( 5 + RANDOM % 11 ))
-          echo "Waiting ${delay} second(s) before signing in ${{ matrix.account_index }}/33 ${{ matrix.account_label }}."
-          sleep "$delay"
+      - name: Run Musicful sign-ins
+        run: npm run signin
 
-      - name: Musicful sign in
-        if: env.SHOULD_RUN_ACCOUNT == 'true' && env.MUSICFUL_STORAGE_STATE_BASE64 != ''
-        run: |
-          set +e
-          npm run signin
-          code=$?
-          set -e
-          if [ ! -f artifacts/signin-result.json ]; then
-            mkdir -p artifacts
-            cat > artifacts/signin-result.json <<EOF
-          {
-            "account": ${{ matrix.account_index }},
-            "label": "${{ matrix.account_label }}",
-            "name": "${{ env.MUSICFUL_ACCOUNT_SECRET_NAME }}",
-            "status": "failed",
-            "message": "Sign-in exited without writing result artifact (exit $code)",
-            "streakDays": null,
-            "growthPoints": null,
-            "musicPoints": null,
-            "finishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "runId": "${{ github.run_id }}",
-            "job": "${{ github.job }}"
-          }
-          EOF
-          fi
-          exit $code
-
-      - name: Upload account result
+      - name: Upload sign-in report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: signin-result-${{ matrix.account_index }}
-          path: artifacts/signin-result.json
-          if-no-files-found: warn
-          retention-days: 14
-
-  daily-summary:
-    name: daily-summary
-    needs: signin
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Download all account results
-        uses: actions/download-artifact@v4
-        with:
-          pattern: signin-result-*
-          path: collected
-          merge-multiple: false
-
-      - name: Build daily summary
-        env:
-          MUSICFUL_SUMMARY_DIR: artifacts
-          MUSICFUL_EXPECTED_ACCOUNTS: "33"
-        run: npm run summary -- collected
-
-      - name: Upload daily summary
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: signin-daily-summary
+          name: musicful-signin-report
           path: |
             artifacts/signin-daily-summary.md
             artifacts/signin-daily-summary.json
+            artifacts/signin-result-*.json
           if-no-files-found: warn
           retention-days: 30
