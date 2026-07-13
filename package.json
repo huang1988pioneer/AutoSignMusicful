@@ -8,7 +8,8 @@
     "setup": "node scripts/musicful-signin.mjs --headed --setup",
     "export-state": "node scripts/musicful-signin.mjs --headed --export-state",
     "signin": "node scripts/musicful-signin.mjs",
-    "signin:headed": "node scripts/musicful-signin.mjs --headed"
+    "signin:headed": "node scripts/musicful-signin.mjs --headed",
+    "summary": "node scripts/summarize-signin-results.mjs"
   },
   "dependencies": {
     "playwright": "^1.52.0"

@@ -18,6 +18,9 @@ const profileDir = profileName
   ? path.join(rootDir, `.musicful-profile-${profileName}`)
   : path.join(rootDir, ".musicful-profile");
 const logDir = path.join(rootDir, "logs");
+const resultDir = process.env.MUSICFUL_RESULT_DIR
+  ? path.resolve(process.env.MUSICFUL_RESULT_DIR)
+  : path.join(rootDir, "artifacts");
 const stateFile = path.join(logDir, "musicful-storage-state.base64");
 const numberedStateFile = profileName
   ? path.join(logDir, `musicful-storage-state-${profileName}.base64`)
@@ -27,6 +30,8 @@ const fallbackSignInUrl = process.env.MUSICFUL_FALLBACK_SIGNIN_URL || "https://w
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const storageStateBase64 = process.env.MUSICFUL_STORAGE_STATE_BASE64 || process.env.MUSICFUL_STORAGE_STATE_BASE64_1;
 const storageStateSecretName = process.env.MUSICFUL_ACCOUNT_SECRET_NAME || "MUSICFUL_STORAGE_STATE_BASE64_1";
+const accountIndexFromEnv = Number.parseInt(process.env.MUSICFUL_ACCOUNT_INDEX || "", 10);
+const accountLabelFromEnv = process.env.MUSICFUL_ACCOUNT_LABEL || "";
 const maxAccounts = Number.parseInt(process.env.MUSICFUL_MAX_ACCOUNTS || "115", 10);
 const scheduledMode = process.env.MUSICFUL_SCHEDULE_MODE || "all";
 const scheduleStartUtc = process.env.MUSICFUL_SCHEDULE_START_UTC || "2026-05-31T05:06:00Z";
@@ -39,6 +44,7 @@ const exportReadyDelaySeconds = Number.isFinite(rawExportReadyDelaySeconds) && r
 
 fs.mkdirSync(profileDir, { recursive: true });
 fs.mkdirSync(logDir, { recursive: true });
+fs.mkdirSync(resultDir, { recursive: true });
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const logFile = path.join(logDir, `musicful-signin-${stamp}.log`);
@@ -47,6 +53,68 @@ function log(message) {
   const line = `[${new Date().toISOString()}] ${message}`;
   console.log(line);
   fs.appendFileSync(logFile, `${line}\n`);
+}
+
+function extractMetrics(text = "") {
+  const streakDays = text.match(/累計\s*[:：]\s*(\d+)\s*天/i)?.[1]
+    || text.match(/streak\s*[:：]?\s*(\d+)\s*(?:day|days)?/i)?.[1]
+    || null;
+  const growthPoints = text.match(/已獲得成長積分\s*(\d+)/i)?.[1]
+    || text.match(/積分\s*[:：]\s*(\d+)/i)?.[1]
+    || text.match(/growth\s*points?\s*(\d+)/i)?.[1]
+    || null;
+  const musicPoints = text.match(/(\d+)\s*\/\s*\d+\s*音樂點/i)?.[1]
+    || text.match(/(\d+)\s*\/\s*\d+\s*music\s*points?/i)?.[1]
+    || null;
+
+  return {
+    streakDays: streakDays != null ? Number(streakDays) : null,
+    growthPoints: growthPoints != null ? Number(growthPoints) : null,
+    musicPoints: musicPoints != null ? Number(musicPoints) : null
+  };
+}
+
+function resolveAccountMeta(accountName) {
+  const indexFromName = accountName.match(/^MUSICFUL_STORAGE_STATE_BASE64_(\d+)$/)?.[1];
+  const account = indexFromName
+    ? Number.parseInt(indexFromName, 10)
+    : (Number.isFinite(accountIndexFromEnv) ? accountIndexFromEnv : null);
+
+  return {
+    account,
+    label: accountLabelFromEnv || null,
+    name: accountName
+  };
+}
+
+function writeSignInResult(result) {
+  const payload = {
+    account: result.account ?? null,
+    label: result.label || null,
+    name: result.name || "unknown",
+    status: result.status || "unknown",
+    message: result.message || "",
+    streakDays: result.streakDays ?? null,
+    growthPoints: result.growthPoints ?? null,
+    musicPoints: result.musicPoints ?? null,
+    finishedAt: result.finishedAt || new Date().toISOString(),
+    runId: process.env.GITHUB_RUN_ID || null,
+    job: process.env.GITHUB_JOB || null
+  };
+
+  const fileName = payload.account != null
+    ? `signin-result-${payload.account}.json`
+    : "signin-result.json";
+  const target = path.join(resultDir, fileName);
+  // Always also write the canonical name used by CI artifact download.
+  const canonical = path.join(resultDir, "signin-result.json");
+  const body = `${JSON.stringify(payload, null, 2)}\n`;
+  fs.writeFileSync(target, body, "utf8");
+  if (target !== canonical) {
+    fs.writeFileSync(canonical, body, "utf8");
+  }
+  log(`Wrote sign-in result: ${canonical} (${payload.status})`);
+  return payload;
 }
 
 async function visibleText(page) {
@@ -596,8 +664,13 @@ async function signInWithContext(context, accountName) {
   if (/(already checked|already signed|已簽到|已签到|今日已|今天已|checked in today)/i.test(beforeText)) {
     log(`[${accountName}] Already signed in today.`);
     await claimAvailableRewards(page, accountName);
-    logReadableStatus(accountName, "After automation", await visibleText(page));
-    return;
+    const afterText = await visibleText(page);
+    logReadableStatus(accountName, "After automation", afterText);
+    return {
+      status: "already_done",
+      message: "Already signed in today",
+      ...extractMetrics(afterText)
+    };
   }
 
   await dismissBlockingDialogs(page, accountName);
@@ -613,8 +686,13 @@ async function signInWithContext(context, accountName) {
     if (/(累計|累计|Total).{0,20}\d+/i.test(beforeText)) {
       log(`[${accountName}] Growth Center is reachable; it may already be signed in or the button text changed.`);
       await claimAvailableRewards(page, accountName);
-      logReadableStatus(accountName, "After automation", await visibleText(page));
-      return;
+      const afterText = await visibleText(page);
+      logReadableStatus(accountName, "After automation", afterText);
+      return {
+        status: "already_done",
+        message: "No sign-in button; Growth Center reachable (likely already signed in)",
+        ...extractMetrics(afterText)
+      };
     }
     throw new Error("Could not find the Musicful sign-in action.");
   }
@@ -624,8 +702,8 @@ async function signInWithContext(context, accountName) {
   await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
   await page.waitForTimeout(3000);
 
-  const afterText = await visibleText(page);
-  const success = /(已簽到|已签到|今日已|今天已|success|signed|checked|累計|累计|Total)/i.test(afterText);
+  const afterClickText = await visibleText(page);
+  const success = /(已簽到|已签到|今日已|今天已|success|signed|checked|累計|累计|Total)/i.test(afterClickText);
   if (!success) {
     const screenshot = screenshotPath(accountName);
     await page.screenshot({ path: screenshot, fullPage: true });
@@ -636,6 +714,13 @@ async function signInWithContext(context, accountName) {
   await claimAvailableRewards(page, accountName);
   const finalText = await visibleText(page);
   logReadableStatus(accountName, "After automation", finalText);
+  return {
+    status: success ? "checked_in" : "checked_in",
+    message: success
+      ? `Clicked sign-in action: ${action.label}`
+      : `Clicked sign-in action (${action.label}) but success text was unclear`,
+    ...extractMetrics(finalText)
+  };
 }
 
 async function main() {
@@ -658,19 +743,34 @@ async function main() {
     log(`Found ${storageStates.length} Musicful account storage state(s).`);
     const browser = await chromium.launch(browserOptions);
     let failures = 0;
+    /** @type {ReturnType<typeof writeSignInResult>[]} */
+    const results = [];
 
     try {
       for (const account of storageStates) {
+        const meta = resolveAccountMeta(account.name);
+        if (meta.account == null && account.index != null) {
+          meta.account = account.index;
+        }
         const context = await browser.newContext({
           ...contextOptions,
           storageState: parseStorageState(account.value, account.name)
         });
 
         try {
-          await signInWithContext(context, account.name);
+          const outcome = await signInWithContext(context, account.name);
+          results.push(writeSignInResult({
+            ...meta,
+            ...outcome
+          }));
         } catch (error) {
           failures += 1;
           log(`[${account.name}] Failed: ${error.message}`);
+          results.push(writeSignInResult({
+            ...meta,
+            status: "failed",
+            message: error.message
+          }));
         } finally {
           await context.close();
         }
@@ -698,7 +798,19 @@ async function main() {
   }
 
   try {
-    await signInWithContext(context, "local-profile");
+    const meta = resolveAccountMeta("local-profile");
+    const outcome = await signInWithContext(context, "local-profile");
+    writeSignInResult({
+      ...meta,
+      ...outcome
+    });
+  } catch (error) {
+    writeSignInResult({
+      ...resolveAccountMeta("local-profile"),
+      status: "failed",
+      message: error.message
+    });
+    throw error;
   } finally {
     await context.close();
   }
@@ -706,5 +818,18 @@ async function main() {
 
 main().catch((error) => {
   log(`Failed: ${error.message}`);
+  // Ensure CI still gets a result row when setup fails before per-account handling.
+  try {
+    const resultPath = path.join(resultDir, "signin-result.json");
+    if (!fs.existsSync(resultPath)) {
+      writeSignInResult({
+        ...resolveAccountMeta(storageStateSecretName),
+        status: "failed",
+        message: error.message
+      });
+    }
+  } catch {
+    // ignore secondary write errors
+  }
   process.exitCode = 1;
 });

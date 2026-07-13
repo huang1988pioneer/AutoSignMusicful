@@ -78,6 +78,22 @@ workflow 會每天跑兩次所有已設定帳號：
 
 每次會依照 matrix 執行到 `MUSICFUL_STORAGE_STATE_BASE64_33`。你也可以在 GitHub Actions 頁面手動按 `Run workflow` 測試。
 
+### 每日匯總（Job Summary）
+
+每次 `Musicful Auto Sign` 跑完後，會有 `daily-summary` job：
+
+1. 下載各帳號的 `signin-result-*.json` artifact  
+2. 彙整成表格（checked_in / already_done / skipped / failed）  
+3. 寫入 GitHub Actions **Job Summary**（run 頁面最下方 Summary）  
+4. 上傳 artifact：`signin-daily-summary`（`.md` + `.json`）  
+5. 若有帳號 `failed`，summary job 會失敗方便一眼看出
+
+本機也可從結果資料夾重建匯總：
+
+```bash
+npm run summary -- path/to/collected-results
+```
+
 ## 自訂網址
 
 如果 Musicful 把成長中心換到其他語系或網址，可以用環境變數覆蓋：
