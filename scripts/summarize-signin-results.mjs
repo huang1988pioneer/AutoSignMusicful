@@ -78,70 +78,207 @@ function loadRows(rootDir) {
 }
 
 function fmtNum(value) {
-  if (value === null || value === undefined) return "n/a";
+  if (value === null || value === undefined) return "—";
   const num = Number(value);
-  return Number.isFinite(num) ? String(num) : "n/a";
+  return Number.isFinite(num) ? String(num) : "—";
+}
+
+function fmtReward(value) {
+  if (value === null || value === undefined) return "—";
+  const num = Number(value);
+  return Number.isFinite(num) ? `+${num}` : "—";
 }
 
 function escapeCell(value) {
   return String(value ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
 
+function shortLabel(row) {
+  const raw = row.label || row.name || "unknown";
+  return String(raw)
+    .replace(/\s*\(\d+\)\s*$/, "")
+    .replace(/-checkin$/i, "")
+    .replace(/^MUSICFUL_STORAGE_STATE_BASE64_?/i, "#")
+    .trim();
+}
+
+function statusBadge(status) {
+  switch (status) {
+    case "checked_in":
+      return "✅ checked_in";
+    case "already_done":
+      return "☑️ already_done";
+    case "failed":
+      return "❌ failed";
+    case "skipped":
+      return "⏭️ skipped";
+    default:
+      return `❔ ${status || "unknown"}`;
+  }
+}
+
+function compactMessage(message, max = 120) {
+  const text = String(message || "").replace(/\s+/g, " ").trim();
+  if (!text) return "—";
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
+}
+
+function isNoSecretSkip(row) {
+  if (row.status !== "skipped") return false;
+  const msg = String(row.message || "").toLowerCase();
+  return msg.includes("not configured") || msg.includes("no secret") || msg.includes("missing");
+}
+
+function isNotSelectedSkip(row) {
+  if (row.status !== "skipped") return false;
+  const msg = String(row.message || "").toLowerCase();
+  return msg.includes("not selected") || msg.includes("workflow_dispatch");
+}
+
+function noteForRow(row) {
+  if (row.status === "checked_in") return "new today";
+  if (row.status === "already_done") return "claimed earlier";
+  if (row.status === "failed") return compactMessage(row.message, 80);
+  if (row.status === "skipped") {
+    if (isNoSecretSkip(row)) return "no secret";
+    if (isNotSelectedSkip(row)) return "not selected";
+    return compactMessage(row.message, 80);
+  }
+  return compactMessage(row.message, 80);
+}
+
 function buildMarkdown(rows, meta = {}) {
+  const configuredRows = rows.filter((r) => r.status !== "skipped");
+  const checkedIn = rows.filter((r) => r.status === "checked_in");
+  const alreadyDone = rows.filter((r) => r.status === "already_done");
+  const failedRows = rows.filter((r) => r.status === "failed");
+  const skippedRows = rows.filter((r) => r.status === "skipped");
+  const noSecretRows = skippedRows.filter(isNoSecretSkip);
+  const notSelectedRows = skippedRows.filter(isNotSelectedSkip);
+  const otherSkipped = skippedRows.filter((r) => !isNoSecretSkip(r) && !isNotSelectedSkip(r));
+  const unknownRows = rows.filter(
+    (r) => !["checked_in", "already_done", "skipped", "failed"].includes(r.status)
+  );
+
   const counts = {
     total: rows.length,
-    checked_in: rows.filter((r) => r.status === "checked_in").length,
-    already_done: rows.filter((r) => r.status === "already_done").length,
-    skipped: rows.filter((r) => r.status === "skipped").length,
-    failed: rows.filter((r) => r.status === "failed").length,
-    unknown: rows.filter((r) => !["checked_in", "already_done", "skipped", "failed"].includes(r.status)).length
+    configured: configuredRows.length,
+    checked_in: checkedIn.length,
+    already_done: alreadyDone.length,
+    skipped: skippedRows.length,
+    skipped_no_secret: noSecretRows.length,
+    skipped_not_selected: notSelectedRows.length,
+    failed: failedRows.length,
+    unknown: unknownRows.length,
+    ok: checkedIn.length + alreadyDone.length
   };
 
   const generatedAt = meta.generatedAt || new Date().toISOString();
-  const title = meta.title || "Musicful daily sign-in summary";
+  const title = meta.title || "Musicful daily sign-in";
+  const accountNums = rows.map((r) => r.account).filter((n) => Number.isFinite(n));
+  const accountMin = accountNums.length ? Math.min(...accountNums) : null;
+  const accountMax = accountNums.length ? Math.max(...accountNums) : null;
+
+  const headline =
+    counts.failed === 0 && counts.configured > 0
+      ? "✅ All configured accounts OK"
+      : counts.failed > 0
+        ? `⚠️ ${counts.failed} account(s) need attention`
+        : counts.configured === 0
+          ? "ℹ️ No configured accounts ran"
+          : "ℹ️ Summary";
 
   const lines = [
-    `# ${title}`,
+    `## ${title}`,
     "",
-    `- Generated at: \`${generatedAt}\``,
-    meta.runUrl ? `- Workflow run: ${meta.runUrl}` : null,
-    `- Accounts reported: **${counts.total}**`,
-    `- checked_in: **${counts.checked_in}** | already_done: **${counts.already_done}** | skipped: **${counts.skipped}** | failed: **${counts.failed}**${counts.unknown ? ` | other: **${counts.unknown}**` : ""}`,
+    `**${headline}**`,
     "",
-    `| # | Label | Secret | Status | Streak | Growth pts | Music pts | Detail |`,
-    `| ---: | --- | --- | --- | ---: | ---: | ---: | --- |`,
-    ...rows.map((row) => {
-      const no = row.account ?? "-";
-      const label = row.label || "-";
-      return `| ${no} | ${escapeCell(label)} | ${escapeCell(row.name)} | ${escapeCell(row.status)} | ${fmtNum(
-        row.streakDays
-      )} | ${fmtNum(row.growthPoints)} | ${fmtNum(row.musicPoints)} | ${escapeCell(row.message)} |`;
-    }),
+    "| Metric | Count |",
+    "| --- | ---: |",
+    `| Configured (ran) | ${counts.configured} |`,
+    `| New check-in | ${counts.checked_in} |`,
+    `| Already done | ${counts.already_done} |`,
+    `| OK total | ${counts.ok} |`,
+    `| Failed | ${counts.failed} |`,
+    `| Skipped (no secret) | ${counts.skipped_no_secret} |`,
+    counts.skipped_not_selected
+      ? `| Skipped (not selected) | ${counts.skipped_not_selected} |`
+      : null,
+    counts.unknown ? `| Other | ${counts.unknown} |` : null,
+    "",
+    accountMin != null && accountMax != null
+      ? `<sub>Accounts ${accountMin}–${accountMax} · ${generatedAt}</sub>`
+      : `<sub>${generatedAt}</sub>`,
+    meta.runUrl ? "" : null,
+    meta.runUrl ? `Workflow run: ${meta.runUrl}` : null,
     ""
   ].filter((line) => line !== null);
 
-  const failedRows = rows
-    .filter((r) => r.status === "failed")
-    .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9));
-
   if (failedRows.length > 0) {
-    lines.push("## Failed accounts", "");
-    for (const row of failedRows) {
-      const who = row.label || row.name;
-      lines.push(`- **${escapeCell(who)}** (\`${escapeCell(row.name)}\`): ${escapeCell(row.message)}`);
+    lines.push("### ⚠️ Needs attention", "");
+    lines.push("| # | Account | Error |");
+    lines.push("| ---: | --- | --- |");
+    for (const row of [...failedRows].sort(
+      (a, b) => (a.account ?? 9999) - (b.account ?? 9999)
+    )) {
+      const no = row.account ?? "—";
+      lines.push(
+        `| ${no} | ${escapeCell(shortLabel(row))} | ${escapeCell(compactMessage(row.message || "failed", 160))} |`
+      );
+    }
+    lines.push("", "_Per-account result JSON: artifact `signin-result-N` · Daily report: `signin-daily-summary`._", "");
+  }
+
+  const ranRows = rows.filter((r) => r.status !== "skipped");
+  if (ranRows.length > 0) {
+    lines.push("### Account results", "");
+    lines.push("| # | Account | Status | Growth | Music | Streak | Note |");
+    lines.push("| ---: | --- | --- | ---: | ---: | ---: | --- |");
+    for (const row of ranRows) {
+      const no = row.account ?? "—";
+      lines.push(
+        `| ${no} | ${escapeCell(shortLabel(row))} | ${statusBadge(row.status)} | ${fmtReward(
+          row.growthPoints
+        )} | ${fmtNum(row.musicPoints)} | ${fmtNum(row.streakDays)} | ${escapeCell(noteForRow(row))} |`
+      );
     }
     lines.push("");
   }
 
-  const skippedRows = rows.filter((r) => r.status === "skipped");
-  if (skippedRows.length > 0) {
-    lines.push("## Skipped accounts", "");
-    for (const row of skippedRows) {
-      const who = row.label || row.name;
-      lines.push(`- **${escapeCell(who)}**: ${escapeCell(row.message || "skipped")}`);
+  if (noSecretRows.length > 0 || notSelectedRows.length > 0 || otherSkipped.length > 0) {
+    lines.push("### Skipped", "");
+    if (noSecretRows.length > 0) {
+      const ids = noSecretRows.map((r) => r.account ?? "?").join(", ");
+      lines.push(`No secret / storage: **#${ids}**`, "");
     }
-    lines.push("");
+    if (notSelectedRows.length > 0) {
+      const ids = notSelectedRows.map((r) => r.account ?? "?").join(", ");
+      lines.push(`Not selected this run: **#${ids}**`, "");
+    }
+    if (otherSkipped.length > 0) {
+      for (const row of otherSkipped) {
+        lines.push(`- **#${row.account ?? "?"} ${escapeCell(shortLabel(row))}**: ${escapeCell(row.message || "skipped")}`);
+      }
+      lines.push("");
+    }
   }
+
+  if (counts.configured === 0 && counts.total > 0) {
+    lines.push(
+      "### Next step",
+      "",
+      "Add GitHub Secrets `MUSICFUL_STORAGE_STATE_BASE64_N` (export via `npm run export-state` after `npm run setup`).",
+      ""
+    );
+  }
+
+  lines.push(
+    "---",
+    "",
+    "<sub>Status: `checked_in` = claimed this run · `already_done` = already claimed today · `failed` = needs re-auth or layout change</sub>",
+    ""
+  );
 
   return { markdown: `${lines.join("\n")}\n`, counts };
 }
@@ -149,12 +286,16 @@ function buildMarkdown(rows, meta = {}) {
 function printConsoleTable(rows, counts) {
   console.log("\n========== Musicful daily sign-in summary ==========");
   console.log(
-    `Total: ${counts.total} | checked_in: ${counts.checked_in} | already_done: ${counts.already_done} | skipped: ${counts.skipped} | failed: ${counts.failed}`
+    `Configured: ${counts.configured} | checked_in: ${counts.checked_in} | already_done: ${counts.already_done} | skipped: ${counts.skipped} | failed: ${counts.failed}`
   );
   for (const row of rows) {
+    if (row.status === "skipped") continue;
     console.log(
-      `- #${row.account ?? "?"} ${row.label || row.name}: ${row.status} | streak ${fmtNum(row.streakDays)} | growth ${fmtNum(row.growthPoints)} | ${row.message}`
+      `- #${row.account ?? "?"} ${shortLabel(row)}: ${row.status} | streak ${fmtNum(row.streakDays)} | growth ${fmtNum(row.growthPoints)} | ${row.message}`
     );
+  }
+  if (counts.skipped_no_secret > 0) {
+    console.log(`Skipped (no secret): ${counts.skipped_no_secret}`);
   }
   console.log("====================================================\n");
 }
@@ -171,7 +312,7 @@ function main() {
     if (process.env.GITHUB_STEP_SUMMARY) {
       fs.appendFileSync(
         process.env.GITHUB_STEP_SUMMARY,
-        `# Musicful daily sign-in summary\n\n❌ ${message}\n`,
+        `## Musicful daily sign-in\n\n❌ ${message}\n`,
         "utf8"
       );
     }
@@ -186,12 +327,17 @@ function main() {
     repository && runId ? `${serverUrl}/${repository}/actions/runs/${runId}` : null;
 
   const { markdown, counts } = buildMarkdown(rows, {
-    title: "Musicful daily sign-in summary",
+    title: "Musicful daily sign-in",
     generatedAt: new Date().toISOString(),
     runUrl
   });
 
   printConsoleTable(rows, counts);
+
+  // Always print markdown for log searchability (same as LitVideo).
+  console.log("----- GITHUB SUMMARY (markdown) -----");
+  console.log(markdown);
+  console.log("----- END GITHUB SUMMARY -----");
 
   fs.mkdirSync(outDir, { recursive: true });
   const mdPath = path.join(outDir, "signin-daily-summary.md");
@@ -218,6 +364,7 @@ function main() {
 
   if (process.env.GITHUB_STEP_SUMMARY) {
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown, "utf8");
+    console.log(`Wrote GitHub Job Summary to ${process.env.GITHUB_STEP_SUMMARY}`);
   }
 
   if (counts.failed > 0) {

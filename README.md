@@ -80,10 +80,14 @@ workflow 會每天跑兩次所有已設定帳號：
 
 ### 每日匯總（Job Summary）
 
-每次 `Musicful Auto Sign` 跑完後，會有 `daily-summary` job：
+每次 `Musicful Auto Sign` 跑完後，會有 `daily-summary` job（風格對齊 [AutoSignLitVideo](https://github.com/huang1988pioneer/AutoSignLitVideo)）：
 
 1. 下載各帳號的 `signin-result-*.json` artifact  
-2. 彙整成表格（checked_in / already_done / skipped / failed）  
+2. 彙整成 **Job Summary** 與 markdown 報告，內容包含：  
+   - 總覽 headline（全部成功 / 需關注）  
+   - Metric 計數表（Configured / New check-in / Already done / Failed / Skipped）  
+   - 各帳號結果表（Status / Growth / Music / Streak / Note）  
+   - 失敗帳號清單、未設定 secret 的 skipped 編號  
 3. 寫入 GitHub Actions **Job Summary**（run 頁面最下方 Summary）  
 4. 上傳 artifact：`signin-daily-summary`（`.md` + `.json`）  
 5. 若有帳號 `failed`，summary job 會失敗方便一眼看出
