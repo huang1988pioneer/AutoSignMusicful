@@ -84,12 +84,12 @@ Workflow 與 [AutoSignLitVideo](https://github.com/huang1988pioneer/AutoSignLitV
 
 跑完後在 Actions run 頁面可看到：
 
-1. **Summary** 區塊（headline + Metric 表 + 各帳號 Status / Growth / Music / Streak）  
+1. **Summary** 區塊（中文標題 + 統計表 + 各帳號狀態 / 成長點 / 音樂點 / 連續）  
 2. Artifact：`musicful-signin-report`  
    - `signin-daily-summary.md` / `.json`  
    - 各帳號 `signin-result-N.json`  
-3. 未設定 secret 的槽位會標成 skipped（`#21–33` 等）  
-4. 有帳號 `failed` 時 job 會失敗，Summary 會列出需關注帳號  
+3. 未設定 secret 的槽位會標成略過（`#21–33` 等）  
+4. 有帳號失敗時 job 會失敗，Summary 會列出需關注帳號  
 
 本機也可從結果資料夾重建匯總：
 
