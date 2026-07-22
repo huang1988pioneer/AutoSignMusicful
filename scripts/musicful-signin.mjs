@@ -203,27 +203,40 @@ function isLoggedOutGrowthCenterPage(page, text) {
 
 async function waitForLoggedInGrowthCenter(page, accountName) {
   log(`[${accountName}] Export mode is open. Log in and open the Growth Center within ${exportTimeoutMinutes} minute(s); this will export after the account status is visible.`);
+  log(`[${accountName}] Export wait is passive (no Escape / dialog dismiss) to avoid focus steal and UI flicker while you log in.`);
 
+  const pollMs = 4000;
   const deadline = Date.now() + exportTimeoutMinutes * 60 * 1000;
-  while (Date.now() < deadline) {
-    await page.waitForTimeout(3000);
+  let lastLoginPromptLogAt = 0;
 
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(pollMs);
+
+    // Passive poll only: never press Escape or click close while the user may still be
+    // logging in. Aggressive dismiss was causing visible flicker / closing login UI.
     if (await hasVisibleLoginPrompt(page)) {
-      log(`[${accountName}] Login prompt is visible; leaving focus alone while you finish login.`);
+      if (Date.now() - lastLoginPromptLogAt > 15_000) {
+        log(`[${accountName}] Login prompt is visible; leaving focus alone while you finish login.`);
+        lastLoginPromptLogAt = Date.now();
+      }
       continue;
     }
-
-    await dismissBlockingDialogs(page, accountName);
 
     const diagnostics = await logPageDiagnostics(page, accountName, "Export check");
     const hasControls = diagnostics.visibleCalendarItems > 0 || diagnostics.visibleLuckyDrops > 0 || diagnostics.visibleCollectAllButtons > 0;
     const hasStatus = /(已獲得成長積分|簽到點亮|累計\s*[:：]\s*\d+\s*天|\d+\s*\/\s*\d+\s*音樂點|Earned Growth|Growth Points|Streak)/i.test(diagnostics.text);
     const loginPromptVisible = await hasVisibleLoginPrompt(page, diagnostics.text);
     if (loginPromptVisible) {
-      log(`[${accountName}] Login prompt is still visible; waiting for login to finish.`);
+      if (Date.now() - lastLoginPromptLogAt > 15_000) {
+        log(`[${accountName}] Login prompt is still visible; waiting for login to finish.`);
+        lastLoginPromptLogAt = Date.now();
+      }
       continue;
     }
     if ((hasControls || hasStatus) && !isLoggedOutGrowthCenterPage(page, diagnostics.text)) {
+      // Dismiss only once after login is confirmed, so a leftover pricing modal does not
+      // hide status during the ready delay — still avoids the every-poll Escape flicker.
+      await dismissBlockingDialogs(page, accountName);
       log(`[${accountName}] Logged-in Growth Center state detected; waiting ${exportReadyDelaySeconds} second(s) before export.`);
       await page.waitForTimeout(exportReadyDelaySeconds * 1000);
       const finalText = await visibleText(page).catch(() => "");
