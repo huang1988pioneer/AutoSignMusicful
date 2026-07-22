@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 const rawArgs = process.argv.slice(2);
@@ -27,7 +28,7 @@ const numberedStateFile = profileName
   : stateFile;
 const signInUrl = process.env.MUSICFUL_SIGNIN_URL || "https://tw.musicful.ai/growth-center/";
 const fallbackSignInUrl = process.env.MUSICFUL_FALLBACK_SIGNIN_URL || "https://www.musicful.ai/growth-center/";
-const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const chromePathFromEnv = process.env.CHROME_PATH || "";
 const storageStateBase64 = process.env.MUSICFUL_STORAGE_STATE_BASE64 || process.env.MUSICFUL_STORAGE_STATE_BASE64_1;
 const storageStateSecretName = process.env.MUSICFUL_ACCOUNT_SECRET_NAME || "MUSICFUL_STORAGE_STATE_BASE64_1";
 const accountIndexFromEnv = Number.parseInt(process.env.MUSICFUL_ACCOUNT_INDEX || "", 10);
@@ -180,7 +181,7 @@ async function logPageDiagnostics(page, accountName, stage) {
 async function ensureGrowthCenterControls(page, accountName) {
   let diagnostics = await logPageDiagnostics(page, accountName, "Initial page");
   const hasControls = diagnostics.visibleCalendarItems > 0 || diagnostics.visibleLuckyDrops > 0 || diagnostics.visibleCollectAllButtons > 0;
-  const looksLoggedOut = /(Log In|Login|登入|註冊|Sign Up)/i.test(diagnostics.text)
+  const looksLoggedOut = textLooksLikeLoginPrompt(diagnostics.text)
     && !/(已獲得成長積分|累計|音樂點|Growth Points|Streak)/i.test(diagnostics.text);
   if ((hasControls && !looksLoggedOut) || signInUrl === fallbackSignInUrl) {
     return diagnostics;
@@ -194,86 +195,191 @@ async function ensureGrowthCenterControls(page, accountName) {
   return diagnostics;
 }
 
+/** True when page text looks like a login CTA, not logged-in chrome (e.g. 已登入). */
+function textLooksLikeLoginPrompt(text = "") {
+  if (!text) return false;
+  // "登入" is a substring of "已登入" — never treat logged-in labels as a login prompt.
+  if (/(已登入|已登录|Logged\s*in|You\s*are\s*signed\s*in)/i.test(text) &&
+      !/(請登入|请登录|立即登入|立即登录|會員登入|会员登录|Log\s*In|Sign\s*Up|使用\s*Google\s*繼續|使用\s*Discord\s*繼續|輸入你的信箱)/i.test(text)) {
+    return false;
+  }
+
+  return new RegExp([
+    "Log\\s*In",
+    "(?<![a-z])Login(?![a-z])",
+    "Sign\\s*Up",
+    "請登入",
+    "请登录",
+    "立即登入",
+    "立即登录",
+    "會員登入",
+    "会员登录",
+    // bare 登入/登录 only when not preceded by 已
+    "(?<![已])登入",
+    "(?<![已])登录",
+    "使用\\s*Google\\s*繼續",
+    "使用\\s*Discord\\s*繼續",
+    "輸入你的信箱"
+  ].join("|"), "i").test(text);
+}
+
 function isLoggedOutGrowthCenterPage(page, text) {
-  const hasLoginPrompt = /(Log In|Login|登入|註冊|Sign Up)/i.test(text);
+  const hasLoginPrompt = textLooksLikeLoginPrompt(text);
   const hasAccountStatus = /(已獲得成長積分|簽到點亮|累計\s*[:：]\s*\d+\s*天|\d+\s*\/\s*\d+\s*音樂點|Earned Growth|Growth Points|Streak)/i.test(text);
   const isHomePage = page.url().includes("/home/");
   return hasLoginPrompt && (isHomePage || !hasAccountStatus);
 }
 
-async function waitForLoggedInGrowthCenter(page, accountName) {
-  log(`[${accountName}] Export mode is open. Log in and open the Growth Center within ${exportTimeoutMinutes} minute(s); this will export after the account status is visible.`);
-  log(`[${accountName}] Export wait is passive (no Escape / dialog dismiss) to avoid focus steal and UI flicker while you log in.`);
-
-  const pollMs = 4000;
-  const deadline = Date.now() + exportTimeoutMinutes * 60 * 1000;
-  let lastLoginPromptLogAt = 0;
-
-  while (Date.now() < deadline) {
-    await page.waitForTimeout(pollMs);
-
-    // Passive poll only: never press Escape or click close while the user may still be
-    // logging in. Aggressive dismiss was causing visible flicker / closing login UI.
-    if (await hasVisibleLoginPrompt(page)) {
-      if (Date.now() - lastLoginPromptLogAt > 15_000) {
-        log(`[${accountName}] Login prompt is visible; leaving focus alone while you finish login.`);
-        lastLoginPromptLogAt = Date.now();
-      }
-      continue;
-    }
-
-    const diagnostics = await logPageDiagnostics(page, accountName, "Export check");
-    const hasControls = diagnostics.visibleCalendarItems > 0 || diagnostics.visibleLuckyDrops > 0 || diagnostics.visibleCollectAllButtons > 0;
-    const hasStatus = /(已獲得成長積分|簽到點亮|累計\s*[:：]\s*\d+\s*天|\d+\s*\/\s*\d+\s*音樂點|Earned Growth|Growth Points|Streak)/i.test(diagnostics.text);
-    const loginPromptVisible = await hasVisibleLoginPrompt(page, diagnostics.text);
-    if (loginPromptVisible) {
-      if (Date.now() - lastLoginPromptLogAt > 15_000) {
-        log(`[${accountName}] Login prompt is still visible; waiting for login to finish.`);
-        lastLoginPromptLogAt = Date.now();
-      }
-      continue;
-    }
-    if ((hasControls || hasStatus) && !isLoggedOutGrowthCenterPage(page, diagnostics.text)) {
-      // Dismiss only once after login is confirmed, so a leftover pricing modal does not
-      // hide status during the ready delay — still avoids the every-poll Escape flicker.
-      await dismissBlockingDialogs(page, accountName);
-      log(`[${accountName}] Logged-in Growth Center state detected; waiting ${exportReadyDelaySeconds} second(s) before export.`);
-      await page.waitForTimeout(exportReadyDelaySeconds * 1000);
-      const finalText = await visibleText(page).catch(() => "");
-      if (await hasVisibleLoginPrompt(page, finalText)) {
-        log(`[${accountName}] Login prompt reappeared after the ready delay; waiting for login to finish.`);
-        continue;
-      }
-      log(`[${accountName}] Logged-in Growth Center state detected; exporting storage state.`);
-      return;
-    }
-  }
-
-  throw new Error("Could not export Musicful storage state because the Growth Center never showed a logged-in account.");
+function growthCenterLooksReady(diagnostics) {
+  const hasControls = diagnostics.visibleCalendarItems > 0
+    || diagnostics.visibleLuckyDrops > 0
+    || diagnostics.visibleCollectAllButtons > 0;
+  const hasStatus = /(已獲得成長積分|簽到點亮|累計\s*[:：]\s*\d+\s*天|\d+\s*\/\s*\d+\s*音樂點|Earned Growth|Growth Points|Streak)/i.test(diagnostics.text || "");
+  return hasControls || hasStatus;
 }
 
-async function hasVisibleLoginPrompt(page, text = "") {
-  const loginTextPattern = new RegExp([
-    "Log In",
-    "Login",
-    "Sign Up",
-    "\\u767b\\u5165",
-    "\\u4f7f\\u7528\\s*Google\\s*\\u7e7c\\u7e8c",
-    "\\u4f7f\\u7528\\s*Discord\\s*\\u7e7c\\u7e8c",
-    "\\u8f38\\u5165\\u4f60\\u7684\\u4fe1\\u7bb1"
-  ].join("|"), "i");
-
-  if (loginTextPattern.test(text)) {
-    return true;
+/**
+ * Wait for the user to finish login without touching the page.
+ * Previous Node-side locator polling + Escape dismiss looked like infinite refresh.
+ * Now: zero Playwright actions until export; optional in-page auto-detect + Enter key.
+ */
+function createStdinEnterWaiter(promptLine) {
+  if (!process.stdin.isTTY) {
+    return {
+      promise: new Promise(() => {}),
+      cancel() {}
+    };
   }
 
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  let settled = false;
+  const promise = new Promise((resolve) => {
+    log(promptLine);
+    rl.question("", () => {
+      if (settled) return;
+      settled = true;
+      resolve("enter");
+    });
+  });
+
+  return {
+    promise,
+    cancel() {
+      if (settled) return;
+      settled = true;
+      try {
+        rl.close();
+      } catch {
+        // ignore
+      }
+    }
+  };
+}
+
+async function waitForLoggedInGrowthCenter(page, accountName) {
+  log(`[${accountName}] Export mode is open. Log in and open the Growth Center within ${exportTimeoutMinutes} minute(s).`);
+  log(`[${accountName}] This wait does not click, press Escape, dismiss dialogs, or re-navigate — to avoid flicker/reload.`);
+
+  let navCount = 0;
+  const onNavigated = (frame) => {
+    if (frame !== page.mainFrame()) return;
+    navCount += 1;
+    if (navCount <= 15 || navCount % 10 === 0) {
+      log(`[${accountName}] Main-frame navigation #${navCount}: ${page.url()}`);
+    }
+    if (navCount === 6) {
+      log(`[${accountName}] Warning: many full navigations detected (possible reload loop). Use system Chrome if possible, wait until the page is stable, then press Enter.`);
+    }
+  };
+  page.on("framenavigated", onNavigated);
+
+  const enterWaiter = createStdinEnterWaiter(
+    `[${accountName}] When the Growth Center shows your account status, press Enter in this terminal to export.`
+  );
+
+  let waitSettled = false;
+  // In-page check only (no Playwright locator thrashing / focus steal).
+  // Require calendar/lucky-drop controls so a logged-out Growth Center shell
+  // ("已獲得成長積分 0" + nav 登入) does not auto-export too early.
+  const autoReady = page.waitForFunction(() => {
+    const text = (document.body && document.body.innerText) || "";
+    const hasStatus = /已獲得成長積分\s*\d+|簽到點亮|累計\s*[:：]\s*\d+\s*天|\d+\s*\/\s*\d+\s*音樂點|Earned Growth|Growth Points|Streak/i.test(text);
+    if (!hasStatus) return false;
+
+    const hasLoggedInControls = Boolean(
+      document.querySelector(".calendar-box .calendar-item, .continuous-check-box .flex-1")
+    );
+    if (!hasLoggedInControls) return false;
+
+    const loginNodes = document.querySelectorAll(
+      "input[type='email'], input[placeholder*='信箱'], .third-login-text"
+    );
+
+    for (const el of loginNodes) {
+      const style = window.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) {
+        continue;
+      }
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) return false;
+    }
+    return true;
+  }, {
+    timeout: exportTimeoutMinutes * 60 * 1000,
+    polling: 5_000
+  }).then(() => "auto").catch((error) => {
+    if (waitSettled) return "cancelled";
+    throw error;
+  });
+
+  let trigger;
+  try {
+    trigger = await Promise.race([
+      autoReady,
+      enterWaiter.promise
+    ]);
+    waitSettled = true;
+    // Swallow late settlement from the other racer (avoids unhandled rejection).
+    autoReady.catch(() => {});
+  } catch (error) {
+    waitSettled = true;
+    enterWaiter.cancel();
+    page.off("framenavigated", onNavigated);
+    throw new Error(
+      `Could not export Musicful storage state because the Growth Center never showed a logged-in account: ${error.message}`
+    );
+  } finally {
+    waitSettled = true;
+    enterWaiter.cancel();
+    page.off("framenavigated", onNavigated);
+  }
+
+  if (trigger === "cancelled") {
+    throw new Error("Could not export Musicful storage state because the Growth Center never showed a logged-in account.");
+  }
+
+  log(`[${accountName}] Export trigger: ${trigger}${navCount ? ` (main-frame navigations=${navCount})` : ""}.`);
+  if (exportReadyDelaySeconds > 0) {
+    log(`[${accountName}] Waiting ${exportReadyDelaySeconds} second(s) before reading storage state.`);
+    await page.waitForTimeout(exportReadyDelaySeconds * 1000);
+  }
+  log(`[${accountName}] Exporting storage state (no page interaction).`);
+}
+
+async function hasVisibleLoginForm(page) {
   const selectors = [
     "input[type='email']",
     "input[placeholder*='email' i]",
     "input[placeholder*='信箱']",
     ".third-login-text",
-    ".el-overlay input",
-    ".el-overlay [class*='login' i]"
+    ".el-overlay input[type='email']",
+    ".el-overlay input[placeholder*='email' i]",
+    ".el-overlay input[placeholder*='信箱']",
+    ".el-overlay [class*='login' i] input",
+    ".el-overlay .third-login-text"
   ];
 
   for (const selector of selectors) {
@@ -284,6 +390,13 @@ async function hasVisibleLoginPrompt(page, text = "") {
   }
 
   return false;
+}
+
+async function hasVisibleLoginPrompt(page, text = "") {
+  if (textLooksLikeLoginPrompt(text)) {
+    return true;
+  }
+  return hasVisibleLoginForm(page);
 }
 
 async function dismissBlockingDialogs(page, accountName) {
@@ -737,11 +850,23 @@ function copyToClipboard(value) {
 
 async function signInWithContext(context, accountName) {
   log(`[${accountName}] Opening ${signInUrl}`);
-  const page = context.pages()[0] || await context.newPage();
+  // Prefer a single clean tab for export/setup to avoid restored tabs fighting for focus.
+  const existingPages = context.pages();
+  const page = existingPages[0] || await context.newPage();
+  if (exportStateMode || setupMode) {
+    for (let i = 1; i < existingPages.length; i += 1) {
+      await existingPages[i].close().catch(() => {});
+    }
+  }
   page.setDefaultTimeout(20_000);
 
-  await page.goto(signInUrl, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+  await page.goto(signInUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  // SPAs often never reach networkidle; waiting for it can sit on a busy/reloading page for 30s.
+  if (!exportStateMode && !setupMode) {
+    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+  } else {
+    await page.waitForTimeout(1_500).catch(() => {});
+  }
 
   if (setupMode) {
     log("Setup mode is open. Log in if needed, then press Ctrl+C here after the Growth Center shows your account.");
@@ -767,7 +892,10 @@ async function signInWithContext(context, accountName) {
     } else {
       log("Storage state was not copied to clipboard; copy it from the exported file.");
     }
-    return;
+    return {
+      status: "exported",
+      message: `Storage state exported to ${path.basename(stateFile)}`
+    };
   }
 
   await dismissBlockingDialogs(page, accountName);
@@ -777,7 +905,7 @@ async function signInWithContext(context, accountName) {
   if (isLoggedOutGrowthCenterPage(page, beforeText)) {
     throw new Error("Musicful storage state is logged out or expired. Export a fresh storage state after logging in, then update this account secret.");
   }
-  if (/(Log In|Login|登入|登录|Sign Up|會員登入|会员登录)/i.test(beforeText) && !/(Total|累計|累计|Credits|積分|积分)/i.test(beforeText)) {
+  if (textLooksLikeLoginPrompt(beforeText) && !/(Total|累計|累计|Credits|積分|积分|已登入|已登录)/i.test(beforeText)) {
     throw new Error("Musicful is not logged in for this automation profile. Export a fresh storage state first.");
   }
 
@@ -843,6 +971,62 @@ async function signInWithContext(context, accountName) {
   };
 }
 
+function resolveInstalledChrome() {
+  if (chromePathFromEnv && fs.existsSync(chromePathFromEnv)) {
+    return { executablePath: chromePathFromEnv, label: chromePathFromEnv };
+  }
+
+  if (process.platform === "darwin") {
+    const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    if (fs.existsSync(macChrome)) {
+      return { channel: "chrome", label: "Google Chrome (macOS channel)" };
+    }
+  }
+
+  if (process.platform === "win32") {
+    const candidates = [
+      path.join(process.env.PROGRAMFILES || "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"),
+      path.join(process.env["PROGRAMFILES(X86)"] || "C:\\Program Files (x86)", "Google", "Chrome", "Application", "chrome.exe"),
+      path.join(process.env.LOCALAPPDATA || "", "Google", "Chrome", "Application", "chrome.exe")
+    ];
+    for (const candidate of candidates) {
+      if (candidate && fs.existsSync(candidate)) {
+        // channel lets Playwright pick the installed Chrome without path quirks
+        return { channel: "chrome", label: candidate };
+      }
+    }
+  }
+
+  if (process.platform === "linux") {
+    const linuxCandidates = [
+      "/usr/bin/google-chrome",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/chromium-browser",
+      "/usr/bin/chromium"
+    ];
+    for (const candidate of linuxCandidates) {
+      if (fs.existsSync(candidate)) {
+        return { executablePath: candidate, label: candidate };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function applyStealthInit(context) {
+  // Reduce obvious automation signals that some sites treat as bot (reload/challenge loops).
+  await context.addInitScript(() => {
+    try {
+      Object.defineProperty(navigator, "webdriver", {
+        get: () => undefined
+      });
+    } catch {
+      // ignore
+    }
+  });
+}
+
 async function main() {
   log(`Opening ${signInUrl}`);
   const browserOptions = {
@@ -852,6 +1036,20 @@ async function main() {
       "--disable-crashpad"
     ]
   };
+
+  // Headed login/export: avoid --enable-automation chrome banner / extra bot signals.
+  if (headed || setupMode || exportStateMode) {
+    browserOptions.ignoreDefaultArgs = ["--enable-automation"];
+    browserOptions.args.push("--disable-blink-features=AutomationControlled");
+  }
+
+  const installedChrome = resolveInstalledChrome();
+  if (installedChrome?.channel) {
+    browserOptions.channel = installedChrome.channel;
+  } else if (installedChrome?.executablePath) {
+    browserOptions.executablePath = installedChrome.executablePath;
+  }
+
   const contextOptions = {
     viewport: { width: 1440, height: 1000 },
     locale: "zh-TW",
@@ -861,6 +1059,11 @@ async function main() {
   const storageStates = selectScheduledStorageState(collectStorageStates());
   if (storageStates.length > 0 || process.env.GITHUB_ACTIONS === "true" || process.env.MUSICFUL_AUTO_SUMMARY === "1") {
     log(`Found ${storageStates.length} Musicful account storage state(s).`);
+    if (installedChrome) {
+      log(`Browser: ${installedChrome.label}`);
+    } else {
+      log("Browser: Playwright Chromium (system Chrome not found).");
+    }
     const browser = storageStates.length > 0 ? await chromium.launch(browserOptions) : null;
     let failures = 0;
     /** @type {ReturnType<typeof writeSignInResult>[]} */
@@ -883,6 +1086,7 @@ async function main() {
           ...contextOptions,
           storageState: parseStorageState(account.value, account.name)
         });
+        await applyStealthInit(context);
 
         try {
           const outcome = await signInWithContext(context, account.name);
@@ -936,14 +1140,16 @@ async function main() {
 
   let context;
   if (!storageStateBase64) {
-    if (fs.existsSync(chromePath)) {
-      browserOptions.channel = "chrome";
+    if (installedChrome) {
+      log(`Using installed Google Chrome: ${installedChrome.label}`);
+    } else {
+      log("Using Playwright Chromium (system Chrome not found). Install Chrome for more stable headed login/export.");
     }
     context = await chromium.launchPersistentContext(profileDir, {
       ...browserOptions,
       ...contextOptions
     });
-    log("Using installed Google Chrome.");
+    await applyStealthInit(context);
   }
 
   try {
