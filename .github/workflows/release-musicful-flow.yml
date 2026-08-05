@@ -55,7 +55,9 @@ jobs:
       - name: Create Windows archive
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path publish/* -DestinationPath packages/${{ matrix.asset }}
+        run: |
+          New-Item -ItemType Directory -Force -Path packages | Out-Null
+          Compress-Archive -Path publish/* -DestinationPath packages/${{ matrix.asset }} -Force
       - name: Create Unix archive
         if: runner.os != 'Windows'
         run: |
