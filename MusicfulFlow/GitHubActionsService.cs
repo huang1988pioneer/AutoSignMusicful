@@ -21,14 +21,14 @@ internal sealed class GitHubActionsService
         return JsonSerializer.Deserialize<List<RunInfo>>(output, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.FirstOrDefault();
     }
 
-    public async Task<StreakSummary?> GetStreakSummaryAsync(string repository, long runId)
+    public async Task<MonthlySignInSummary?> GetMonthlySignInSummaryAsync(string repository, long runId)
     {
         var output = await RunGhAsync(["run", "view", runId.ToString(), "--repo", repository, "--log"]);
         var values = Regex.Matches(output, @"- #\d+ .*?\|\s*連續\s+(\d+)\s*\|")
             .Select(match => int.TryParse(match.Groups[1].Value, out var days) ? days : 0)
             .Where(days => days > 0)
             .ToArray();
-        return values.Length == 0 ? null : new StreakSummary(values.Max(), values.Sum(), values.Length);
+        return values.Length == 0 ? null : new MonthlySignInSummary(values.Sum(), values.Length);
     }
 
     public async Task<string> GetRepositoryAsync() => (await RunGhAsync(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])).Trim();
@@ -49,4 +49,4 @@ internal sealed class GitHubActionsService
 }
 
 internal sealed record RunInfo(long DatabaseId, string Status, string? Conclusion, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string Url);
-internal sealed record StreakSummary(int LongestDays, int TotalDays, int AccountCount);
+internal sealed record MonthlySignInSummary(int TotalDays, int AccountCount);
