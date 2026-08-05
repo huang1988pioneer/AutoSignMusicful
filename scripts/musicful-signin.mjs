@@ -327,7 +327,10 @@ async function waitForLoggedInGrowthCenter(page, accountName) {
       if (rect.width > 0 && rect.height > 0) return false;
     }
     return true;
-  }, {
+  // Playwright takes an optional page-function argument before its options.
+  // Pass `undefined` explicitly so this timeout is not mistaken for that
+  // argument and replaced by page.setDefaultTimeout(20_000).
+  }, undefined, {
     timeout: exportTimeoutMinutes * 60 * 1000,
     polling: 5_000
   }).then(() => "auto").catch((error) => {
@@ -1161,15 +1164,16 @@ async function main() {
   }
 
   try {
-    const meta = resolveAccountMeta("local-profile");
-    const outcome = await signInWithContext(context, "local-profile");
+    const localAccountName = profileName || "local-profile";
+    const meta = resolveAccountMeta(localAccountName);
+    const outcome = await signInWithContext(context, localAccountName);
     writeSignInResult({
       ...meta,
       ...outcome
     });
   } catch (error) {
     writeSignInResult({
-      ...resolveAccountMeta("local-profile"),
+      ...resolveAccountMeta(profileName || "local-profile"),
       status: "failed",
       message: error.message
     });
