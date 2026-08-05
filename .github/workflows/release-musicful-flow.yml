@@ -1,0 +1,85 @@
+name: Release Musicful Flow
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release (for example v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            rid: win-x64
+            asset: MusicfulFlow-win-x64.zip
+          - name: Linux x64
+            os: ubuntu-latest
+            rid: linux-x64
+            asset: MusicfulFlow-linux-x64.tar.gz
+          - name: macOS Intel
+            os: macos-13
+            rid: osx-x64
+            asset: MusicfulFlow-osx-x64.tar.gz
+          - name: macOS Apple Silicon
+            os: macos-14
+            rid: osx-arm64
+            asset: MusicfulFlow-osx-arm64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Publish self-contained app
+        run: >-
+          dotnet publish MusicfulFlow/MusicfulFlow.csproj
+          --configuration Release
+          --runtime ${{ matrix.rid }}
+          --self-contained true
+          --output publish
+      - name: Create Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path publish/* -DestinationPath packages/${{ matrix.asset }}
+      - name: Create Unix archive
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p packages
+          tar -C publish -czf packages/${{ matrix.asset }} .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: packages/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Create or update release
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes --title "Musicful Flow $TAG"
+          gh release upload "$TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber

@@ -1,5 +1,6 @@
 .DS_Store
 .musicful-profile/
+.musicful-profile-*/
 artifacts/
 logs/
 node_modules/
