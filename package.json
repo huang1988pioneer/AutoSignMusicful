@@ -7,6 +7,7 @@
     "check:secrets": "node scripts/check-duplicate-musicful-secrets.mjs",
     "setup": "node scripts/musicful-signin.mjs --headed --setup",
     "export-state": "node scripts/musicful-signin.mjs --headed --export-state",
+    "read-points": "node scripts/musicful-read-points.mjs",
     "signin": "node scripts/musicful-signin.mjs",
     "signin:headed": "node scripts/musicful-signin.mjs --headed",
     "summary": "node scripts/summarize-signin-results.mjs"

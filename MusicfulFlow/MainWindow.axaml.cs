@@ -83,6 +83,22 @@ public partial class MainWindow : Window
         LoginStatus.Text = $"已複製 {SecretName}。";
     }
 
+    private async void ReadPointsButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        ReadPointsButton.IsEnabled = false;
+        try
+        {
+            PointsStatus.Text = "正在讀取 Musicful 成長中心…";
+            var output = await RunProcessCaptureAsync("node", ["scripts/musicful-read-points.mjs", "--profile", ProfileName]);
+            var points = JsonSerializer.Deserialize<PointsSnapshot>(output.Trim())
+                ?? throw new InvalidOperationException("積分資料格式無法解析。");
+            var music = points.MusicPoints is null ? "—" : points.MusicPointsMax is null ? points.MusicPoints.ToString() : $"{points.MusicPoints} / {points.MusicPointsMax}";
+            PointsStatus.Text = $"成長積分 {Display(points.GrowthPoints)} · 音樂點 {music} · 積分 {Display(points.Points)} · 連續簽到 {Display(points.StreakDays)} 天";
+        }
+        catch (Exception ex) { PointsStatus.Text = $"讀取積分失敗：{ex.Message}"; }
+        finally { ReadPointsButton.IsEnabled = true; }
+    }
+
     private async void TriggerButton_OnClick(object? sender, RoutedEventArgs e)
     {
         await WithDashboardBusy(async () =>
@@ -142,6 +158,11 @@ public partial class MainWindow : Window
 
     private async Task RunProcessAsync(string command, IEnumerable<string> args)
     {
+        _ = await RunProcessCaptureAsync(command, args);
+    }
+
+    private async Task<string> RunProcessCaptureAsync(string command, IEnumerable<string> args)
+    {
         // Use the system installation explicitly. When a project happens to contain an
         // npm shim under node_modules, Windows can otherwise resolve that shim first.
         var executable = NodeCommandPath(command);
@@ -153,6 +174,7 @@ public partial class MainWindow : Window
         await process.WaitForExitAsync();
         var output = await outputTask; var error = await errorTask;
         if (process.ExitCode != 0) throw new InvalidOperationException((string.IsNullOrWhiteSpace(error) ? output : error).Trim().Truncate(900));
+        return output;
     }
 
     private static Dictionary<int, string> LoadAliases()
@@ -192,10 +214,13 @@ public partial class MainWindow : Window
     }
     private static string FindWorkspace()
     {
+        string? workspace = null;
         foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
             for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
-                if (File.Exists(Path.Combine(dir.FullName, "package.json"))) return dir.FullName;
-        return Environment.CurrentDirectory;
+                if (File.Exists(Path.Combine(dir.FullName, "package.json")) &&
+                    File.Exists(Path.Combine(dir.FullName, "scripts", "musicful-signin.mjs")))
+                    workspace = dir.FullName;
+        return workspace ?? Environment.CurrentDirectory;
     }
     private static TimeZoneInfo GetTaipeiZone()
     {
@@ -206,13 +231,22 @@ public partial class MainWindow : Window
     private static string NodeCommandPath(string command)
     {
         if (!OperatingSystem.IsWindows()) return command;
+        if (command == "node")
+        {
+            var nodeExecutable = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe");
+            return File.Exists(nodeExecutable) ? nodeExecutable : "node";
+        }
         var systemCommand = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
             "nodejs",
             $"{command}.cmd");
         return File.Exists(systemCommand) ? systemCommand : $"{command}.cmd";
     }
+
+    private static string Display(int? value) => value?.ToString() ?? "—";
 }
+
+internal sealed record PointsSnapshot(int? GrowthPoints, int? MusicPoints, int? MusicPointsMax, int? Points, int? StreakDays, DateTimeOffset FetchedAt);
 
 internal static class StringExtensions
 {
