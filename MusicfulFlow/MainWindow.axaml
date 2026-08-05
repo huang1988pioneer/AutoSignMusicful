@@ -30,12 +30,17 @@
       <StackPanel MaxWidth="650" Spacing="18">
         <StackPanel x:Name="DashboardView" Spacing="18">
           <TextBlock Text="簽到總覽" FontSize="30" FontWeight="SemiBold" Foreground="#132A42"/>
-          <TextBlock Classes="muted" Text="從目前 GitHub repository 讀取最近一次 Musicful Auto Sign 執行狀態。" TextWrapping="Wrap"/>
-          <Border Classes="panel"><StackPanel Spacing="16">
-            <TextBlock Text="GitHub Actions" FontSize="19" FontWeight="SemiBold"/>
-            <StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="TriggerButton" Classes="primary" Click="TriggerButton_OnClick">立即執行簽到</Button><Button x:Name="RefreshButton" Click="RefreshButton_OnClick">重新整理</Button></StackPanel>
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="28"><StackPanel Spacing="4"><TextBlock Classes="muted" Text="最近執行" FontSize="12"/><TextBlock x:Name="RunMetric" Text="尚未讀取" FontSize="18" FontWeight="SemiBold"/></StackPanel><StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="完成時間" FontSize="12"/><TextBlock x:Name="RunTimeMetric" Text="—" FontSize="18" FontWeight="SemiBold"/></StackPanel></Grid>
-            <TextBlock x:Name="DashboardStatus" Classes="muted" Text="按下「重新整理」以讀取 GitHub Actions。" TextWrapping="Wrap"/>
+          <TextBlock Classes="muted" Text="手動執行每日簽到，並讀取最近一次 Musicful Auto Sign 的完成狀態。" TextWrapping="Wrap"/>
+          <Border Classes="panel"><StackPanel Spacing="18">
+            <TextBlock Text="GitHub Actions 儀表板" FontSize="20" FontWeight="SemiBold"/>
+            <StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="TriggerButton" Classes="primary" Click="TriggerButton_OnClick">立即執行簽到</Button><Button x:Name="RefreshButton" Click="RefreshButton_OnClick">更新執行結果</Button></StackPanel>
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="24">
+              <StackPanel Spacing="4"><TextBlock Classes="muted" Text="已設定帳號" FontSize="12"/><TextBlock x:Name="ConfiguredMetric" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
+              <StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="最近執行" FontSize="12"/><TextBlock x:Name="RunMetric" Text="尚未讀取" FontSize="22" FontWeight="SemiBold"/></StackPanel>
+              <StackPanel Grid.Column="2" Spacing="4"><TextBlock Classes="muted" Text="完成時間" FontSize="12"/><TextBlock x:Name="RunTimeMetric" Text="—" FontSize="18" FontWeight="SemiBold"/></StackPanel>
+            </Grid>
+            <Border Height="1" Background="#DCE5EF"/>
+            <TextBlock x:Name="DashboardStatus" Classes="muted" Text="執行後可在 GitHub Actions 檢視各帳號的成功、失敗與未設定狀態。" TextWrapping="Wrap"/>
           </StackPanel></Border>
         </StackPanel>
         <StackPanel x:Name="AccountsView" IsVisible="False" Spacing="18">

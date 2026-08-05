@@ -19,6 +19,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         AccountComboBox.ItemsSource = Enumerable.Range(1, AccountCount).Select(i => $"帳號 {i:00}").ToArray();
         BuildAliasList();
+        ConfiguredMetric.Text = $"{_aliases.Count} 個";
         UpdateAccountDisplay();
     }
 
