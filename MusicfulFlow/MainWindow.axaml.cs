@@ -90,7 +90,7 @@ public partial class MainWindow : Window
         {
             PointsStatus.Text = "正在讀取 Musicful 成長中心…";
             var output = await RunProcessCaptureAsync("node", ["scripts/musicful-read-points.mjs", "--profile", ProfileName]);
-            var points = JsonSerializer.Deserialize<PointsSnapshot>(output.Trim())
+            var points = JsonSerializer.Deserialize<PointsSnapshot>(output.Trim(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                 ?? throw new InvalidOperationException("積分資料格式無法解析。");
             var music = points.MusicPoints is null ? "—" : points.MusicPointsMax is null ? points.MusicPoints.ToString() : $"{points.MusicPoints} / {points.MusicPointsMax}";
             PointsStatus.Text = $"成長積分 {Display(points.GrowthPoints)} · 音樂點 {music} · 積分 {Display(points.Points)} · 連續簽到 {Display(points.StreakDays)} 天";
