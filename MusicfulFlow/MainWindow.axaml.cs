@@ -58,9 +58,7 @@ public partial class MainWindow : Window
             LoginStatus.Text = "正在確認 Node.js 相依套件與 Chromium…";
             await RunProcessAsync("npm", ["install"]);
             await RunProcessAsync("npx", ["playwright", "install", "chromium"]);
-            LoginStatus.Text = "瀏覽器已開啟。完成登入並到成長中心後，關閉瀏覽器視窗以繼續。";
-            await RunProcessAsync("npm", ["run", "setup", "--", "--profile", ProfileName]);
-            LoginStatus.Text = "正在讀取登入狀態並匯出 Base64…";
+            LoginStatus.Text = "瀏覽器已開啟。請完成登入並停留在成長中心；請勿關閉瀏覽器，工具會在偵測成功後自動匯出。";
             await RunProcessAsync("npm", ["run", "export-state", "--", "--profile", ProfileName]);
             if (!File.Exists(StateFile)) throw new InvalidOperationException("未找到匯出的登入狀態檔。請確認你已在瀏覽器中登入 Musicful。");
             LoginStatus.Text = $"完成。已建立 {Path.GetFileName(StateFile)}；可複製後貼到 GitHub Secret {SecretName}。";
@@ -141,7 +139,9 @@ public partial class MainWindow : Window
 
     private async Task RunProcessAsync(string command, IEnumerable<string> args)
     {
-        var executable = OperatingSystem.IsWindows() ? $"{command}.cmd" : command;
+        // Use the system installation explicitly. When a project happens to contain an
+        // npm shim under node_modules, Windows can otherwise resolve that shim first.
+        var executable = NodeCommandPath(command);
         using var process = new Process { StartInfo = new ProcessStartInfo { FileName = executable, WorkingDirectory = _workspace, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = false } };
         foreach (var arg in args) process.StartInfo.ArgumentList.Add(arg);
         if (!process.Start()) throw new InvalidOperationException($"無法啟動 {command}。");
@@ -154,8 +154,15 @@ public partial class MainWindow : Window
 
     private static Dictionary<int, string> LoadAliases()
     {
-        try { return File.Exists(AliasFile) ? JsonSerializer.Deserialize<Dictionary<int, string>>(File.ReadAllText(AliasFile)) ?? [] : []; }
-        catch (JsonException) { return []; }
+        var aliases = new Dictionary<int, string> { [1] = "goldshoot0720" };
+        try
+        {
+            if (!File.Exists(AliasFile)) return aliases;
+            var saved = JsonSerializer.Deserialize<Dictionary<int, string>>(File.ReadAllText(AliasFile)) ?? [];
+            foreach (var (number, name) in saved) aliases[number] = name;
+            return aliases;
+        }
+        catch (JsonException) { return aliases; }
     }
     private static string FindWorkspace()
     {
@@ -168,6 +175,16 @@ public partial class MainWindow : Window
     {
         try { return TimeZoneInfo.FindSystemTimeZoneById("Taipei Standard Time"); }
         catch { return TimeZoneInfo.FindSystemTimeZoneById("Asia/Taipei"); }
+    }
+
+    private static string NodeCommandPath(string command)
+    {
+        if (!OperatingSystem.IsWindows()) return command;
+        var systemCommand = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "nodejs",
+            $"{command}.cmd");
+        return File.Exists(systemCommand) ? systemCommand : $"{command}.cmd";
     }
 }
 

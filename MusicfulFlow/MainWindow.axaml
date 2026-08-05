@@ -45,7 +45,7 @@
         </StackPanel>
         <StackPanel x:Name="LoginView" IsVisible="False" Spacing="18">
           <TextBlock Text="更新登入狀態" FontSize="30" FontWeight="SemiBold" Foreground="#132A42"/>
-          <TextBlock Classes="muted" Text="開啟瀏覽器完成登入後，關閉瀏覽器即可匯出該帳號的 Storage State。" TextWrapping="Wrap"/>
+          <TextBlock Classes="muted" Text="瀏覽器開啟後完成登入並停留在 Musicful 成長中心；工具偵測到登入狀態後會自動匯出 Storage State。" TextWrapping="Wrap"/>
           <Border Classes="panel"><StackPanel Spacing="14">
             <TextBlock Text="選擇帳號" FontSize="19" FontWeight="SemiBold"/>
             <ComboBox x:Name="AccountComboBox" Width="210" SelectedIndex="0" SelectionChanged="AccountComboBox_OnSelectionChanged"/>
