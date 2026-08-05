@@ -1070,8 +1070,16 @@ async function main() {
     const results = [];
 
     try {
-      for (let i = 0; i < storageStates.length; i += 1) {
-        const account = storageStates[i];
+      // Start every account in its own context.  The offsets are cumulative, so
+      // account N begins 5–15 seconds after account N-1 without waiting for the
+      // prior sign-in to finish.
+      let cumulativeStartDelayMs = 0;
+      const accountTasks = storageStates.map((account, position) => {
+        if (position > 0) cumulativeStartDelayMs += randomDelayMs();
+        return runAccount(account, cumulativeStartDelayMs);
+      });
+
+      async function runAccount(account, startDelayMs) {
         const meta = resolveAccountMeta(account.name);
         if (meta.account == null && account.index != null) {
           meta.account = account.index;
@@ -1080,15 +1088,19 @@ async function main() {
           meta.label = account.label;
         }
 
+        if (startDelayMs > 0) {
+          log(`[${account.name}] Scheduled to start in ${Math.round(startDelayMs / 1000)} second(s).`);
+          await new Promise((resolve) => setTimeout(resolve, startDelayMs));
+        }
+
         log(`\n=== Account ${meta.account ?? "?"}: ${meta.label || account.name} ===`);
-
-        const context = await browser.newContext({
-          ...contextOptions,
-          storageState: parseStorageState(account.value, account.name)
-        });
-        await applyStealthInit(context);
-
+        let context;
         try {
+          context = await browser.newContext({
+            ...contextOptions,
+            storageState: parseStorageState(account.value, account.name)
+          });
+          await applyStealthInit(context);
           const outcome = await signInWithContext(context, account.name);
           results.push(writeSignInResult({
             ...meta,
@@ -1103,15 +1115,11 @@ async function main() {
             message: error.message
           }));
         } finally {
-          await context.close();
-        }
-
-        if (i < storageStates.length - 1) {
-          const delay = randomDelayMs();
-          log(`Waiting ${Math.round(delay / 1000)} second(s) before the next account.`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await context?.close();
         }
       }
+
+      await Promise.all(accountTasks);
     } finally {
       if (browser) await browser.close();
     }
