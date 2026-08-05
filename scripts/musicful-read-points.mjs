@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, firefox } from "playwright";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,24 @@ const profileIndex = args.findIndex((arg) => arg === "--profile");
 const profile = (args.find((arg) => arg.startsWith("--profile="))?.slice(10)
   || (profileIndex >= 0 ? args[profileIndex + 1] : ""))
   .replace(/[^A-Za-z0-9_-]/g, "-");
+const browserIndex = args.findIndex((arg) => arg === "--browser");
+const browserRaw = (args.find((arg) => arg.startsWith("--browser="))?.slice("--browser=".length)
+  || (browserIndex >= 0 ? args[browserIndex + 1] : "")
+  || process.env.MUSICFUL_BROWSER
+  || "chrome").trim().toLowerCase();
+
+/** @type {"chrome" | "edge" | "firefox" | null} */
+const browserChoice =
+  browserRaw === "firefox" || browserRaw === "ff"
+    ? "firefox"
+    : (["edge", "msedge", "microsoft-edge", "microsoftedge", "microsoft_edge"].includes(browserRaw)
+      ? "edge"
+      : (["chrome", "chromium", "google-chrome", "googlechrome", "google_chrome"].includes(browserRaw)
+        ? "chrome"
+        : null));
+if (!browserChoice) {
+  throw new Error(`Unsupported browser "${browserRaw}". Use chrome (default), edge, or firefox.`);
+}
 const stateFile = path.join(rootDir, "logs", `musicful-storage-state-${profile}.base64`);
 
 function readMatch(text, pattern) {
@@ -21,7 +39,13 @@ if (!profile || !fs.existsSync(stateFile)) {
 }
 
 const storageState = JSON.parse(Buffer.from(fs.readFileSync(stateFile, "utf8").trim(), "base64").toString("utf8"));
-const browser = await chromium.launch({ headless: true });
+const launcher = browserChoice === "firefox" ? firefox : chromium;
+/** @type {import("playwright").LaunchOptions} */
+const launchOptions = { headless: true };
+if (browserChoice === "edge") {
+  launchOptions.channel = "msedge";
+}
+const browser = await launcher.launch(launchOptions);
 try {
   const context = await browser.newContext({ storageState, locale: "zh-TW", timezoneId: "Asia/Taipei" });
   const page = await context.newPage();

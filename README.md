@@ -6,14 +6,43 @@ Musicful 頁面顯示每日簽到以紐約時間 00:00 重置；在台灣時間�
 
 ## 第一次設定
 
-請先確認 Mac 有安裝 Google Chrome。
+建議安裝 **Google Chrome**（預設、較穩定）。若 Chrome 無法使用，可改用 **Microsoft Edge** 或 **Firefox** 備案。
 
 ```bash
 npm install
+npx playwright install chromium   # 預設（Chrome / Edge 共用 Playwright chromium 驅動）
+# 備案：npx playwright install firefox
 npm run setup
 ```
 
 瀏覽器打開後登入 Musicful，確認看得到成長中心和帳號狀態後，在終端機按 `Ctrl+C` 結束。
+
+### 選擇瀏覽器（Chrome 預設 / Edge・Firefox 備案）
+
+腳本與桌面工具皆支援：
+
+| 方式 | 說明 |
+|------|------|
+| 環境變數 | `MUSICFUL_BROWSER=chrome`（預設）、`edge` 或 `firefox` |
+| CLI | `--browser chrome` / `edge` / `firefox` |
+| 自訂路徑 | `CHROME_PATH=...` / `EDGE_PATH=...` / `FIREFOX_PATH=...` |
+| Musicful Flow | 「更新登入狀態」頁的瀏覽器下拉選單 |
+
+```bash
+# Edge 備案：登入／匯出／簽到（需已安裝 Microsoft Edge）
+npm run setup -- --browser edge
+npm run export-state -- --browser edge --profile musicful-01
+npm run signin -- --browser edge
+
+# Firefox 備案：登入／匯出／簽到
+npm run setup -- --browser firefox
+npm run export-state -- --browser firefox --profile musicful-01
+npm run signin -- --browser firefox
+npm run signin:headed -- --browser firefox
+```
+
+> 切換瀏覽器後請重新匯出 Storage State；不同瀏覽器的登入狀態不保證互通。GitHub Actions 仍預設使用 Chromium。  
+> Edge 透過 Playwright `channel=msedge` 使用系統已安裝的 Microsoft Edge。
 
 ## 手動簽到一次
 

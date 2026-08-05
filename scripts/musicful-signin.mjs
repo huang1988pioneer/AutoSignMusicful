@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, firefox } from "playwright";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -15,9 +15,13 @@ const profileArgIndex = rawArgs.findIndex((arg) => arg === "--profile");
 const profileArgValue = rawArgs.find((arg) => arg.startsWith("--profile="))?.slice("--profile=".length)
   || (profileArgIndex >= 0 ? rawArgs[profileArgIndex + 1] : "");
 const profileName = (profileArgValue || process.env.MUSICFUL_PROFILE_NAME || "").replace(/[^A-Za-z0-9_-]/g, "-");
-const profileDir = profileName
-  ? path.join(rootDir, `.musicful-profile-${profileName}`)
-  : path.join(rootDir, ".musicful-profile");
+const browserArgIndex = rawArgs.findIndex((arg) => arg === "--browser");
+const browserArgValue = rawArgs.find((arg) => arg.startsWith("--browser="))?.slice("--browser=".length)
+  || (browserArgIndex >= 0 ? rawArgs[browserArgIndex + 1] : "");
+/** @type {"chrome" | "edge" | "firefox"} */
+const browserChoice = normalizeBrowserChoice(browserArgValue || process.env.MUSICFUL_BROWSER || "chrome");
+// Keep chrome on the historical profile path; isolate other engines so they never share disk state.
+const profileDir = resolveProfileDir(browserChoice, profileName, rootDir);
 const logDir = path.join(rootDir, "logs");
 const resultDir = process.env.MUSICFUL_RESULT_DIR
   ? path.resolve(process.env.MUSICFUL_RESULT_DIR)
@@ -29,6 +33,8 @@ const numberedStateFile = profileName
 const signInUrl = process.env.MUSICFUL_SIGNIN_URL || "https://tw.musicful.ai/growth-center/";
 const fallbackSignInUrl = process.env.MUSICFUL_FALLBACK_SIGNIN_URL || "https://www.musicful.ai/growth-center/";
 const chromePathFromEnv = process.env.CHROME_PATH || "";
+const edgePathFromEnv = process.env.EDGE_PATH || process.env.MSEDGE_PATH || "";
+const firefoxPathFromEnv = process.env.FIREFOX_PATH || "";
 const storageStateBase64 = process.env.MUSICFUL_STORAGE_STATE_BASE64 || process.env.MUSICFUL_STORAGE_STATE_BASE64_1;
 const storageStateSecretName = process.env.MUSICFUL_ACCOUNT_SECRET_NAME || "MUSICFUL_STORAGE_STATE_BASE64_1";
 const accountIndexFromEnv = Number.parseInt(process.env.MUSICFUL_ACCOUNT_INDEX || "", 10);
@@ -974,6 +980,56 @@ async function signInWithContext(context, accountName) {
   };
 }
 
+/**
+ * @param {string} raw
+ * @returns {"chrome" | "edge" | "firefox"}
+ */
+function normalizeBrowserChoice(raw) {
+  const value = String(raw || "chrome").trim().toLowerCase();
+  if (value === "firefox" || value === "ff") return "firefox";
+  if (
+    value === "edge"
+    || value === "msedge"
+    || value === "microsoft-edge"
+    || value === "microsoftedge"
+    || value === "microsoft_edge"
+  ) {
+    return "edge";
+  }
+  if (
+    value === "chrome"
+    || value === "chromium"
+    || value === "google-chrome"
+    || value === "googlechrome"
+    || value === "google_chrome"
+  ) {
+    return "chrome";
+  }
+  throw new Error(`Unsupported browser "${raw}". Use chrome (default), edge, or firefox.`);
+}
+
+/**
+ * @param {"chrome" | "edge" | "firefox"} choice
+ * @param {string} name
+ * @param {string} root
+ */
+function resolveProfileDir(choice, name, root) {
+  if (choice === "firefox") {
+    return name
+      ? path.join(root, `.musicful-profile-firefox-${name}`)
+      : path.join(root, ".musicful-profile-firefox");
+  }
+  if (choice === "edge") {
+    return name
+      ? path.join(root, `.musicful-profile-edge-${name}`)
+      : path.join(root, ".musicful-profile-edge");
+  }
+  // chrome keeps the historical path for existing profiles
+  return name
+    ? path.join(root, `.musicful-profile-${name}`)
+    : path.join(root, ".musicful-profile");
+}
+
 function resolveInstalledChrome() {
   if (chromePathFromEnv && fs.existsSync(chromePathFromEnv)) {
     return { executablePath: chromePathFromEnv, label: chromePathFromEnv };
@@ -1017,6 +1073,181 @@ function resolveInstalledChrome() {
   return null;
 }
 
+function resolveInstalledEdge() {
+  if (edgePathFromEnv && fs.existsSync(edgePathFromEnv)) {
+    return { executablePath: edgePathFromEnv, label: edgePathFromEnv };
+  }
+
+  if (process.platform === "darwin") {
+    const macEdge = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge";
+    if (fs.existsSync(macEdge)) {
+      return { channel: "msedge", label: "Microsoft Edge (macOS channel)" };
+    }
+  }
+
+  if (process.platform === "win32") {
+    const candidates = [
+      path.join(process.env.PROGRAMFILES || "C:\\Program Files", "Microsoft", "Edge", "Application", "msedge.exe"),
+      path.join(process.env["PROGRAMFILES(X86)"] || "C:\\Program Files (x86)", "Microsoft", "Edge", "Application", "msedge.exe"),
+      path.join(process.env.LOCALAPPDATA || "", "Microsoft", "Edge", "Application", "msedge.exe")
+    ];
+    for (const candidate of candidates) {
+      if (candidate && fs.existsSync(candidate)) {
+        return { channel: "msedge", label: candidate };
+      }
+    }
+  }
+
+  if (process.platform === "linux") {
+    const linuxCandidates = [
+      "/usr/bin/microsoft-edge",
+      "/usr/bin/microsoft-edge-stable",
+      "/usr/bin/microsoft-edge-beta",
+      "/usr/bin/microsoft-edge-dev"
+    ];
+    for (const candidate of linuxCandidates) {
+      if (fs.existsSync(candidate)) {
+        return { executablePath: candidate, label: candidate };
+      }
+    }
+  }
+
+  // Playwright can still try the msedge channel when the binary path is unknown.
+  return { channel: "msedge", label: "Microsoft Edge (Playwright channel: msedge)" };
+}
+
+function resolveInstalledFirefox() {
+  if (firefoxPathFromEnv && fs.existsSync(firefoxPathFromEnv)) {
+    return { executablePath: firefoxPathFromEnv, label: firefoxPathFromEnv };
+  }
+
+  if (process.platform === "darwin") {
+    const macFirefox = "/Applications/Firefox.app/Contents/MacOS/firefox";
+    if (fs.existsSync(macFirefox)) {
+      return { channel: "firefox", label: "Firefox (macOS channel)" };
+    }
+  }
+
+  if (process.platform === "win32") {
+    const candidates = [
+      path.join(process.env.PROGRAMFILES || "C:\\Program Files", "Mozilla Firefox", "firefox.exe"),
+      path.join(process.env["PROGRAMFILES(X86)"] || "C:\\Program Files (x86)", "Mozilla Firefox", "firefox.exe"),
+      path.join(process.env.LOCALAPPDATA || "", "Mozilla Firefox", "firefox.exe")
+    ];
+    for (const candidate of candidates) {
+      if (candidate && fs.existsSync(candidate)) {
+        return { channel: "firefox", label: candidate };
+      }
+    }
+  }
+
+  if (process.platform === "linux") {
+    const linuxCandidates = [
+      "/usr/bin/firefox",
+      "/usr/bin/firefox-esr",
+      "/snap/bin/firefox"
+    ];
+    for (const candidate of linuxCandidates) {
+      if (fs.existsSync(candidate)) {
+        return { executablePath: candidate, label: candidate };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Chromium-family launch args (Chrome / Edge). Not applied to Firefox.
+ * @param {import("playwright").LaunchOptions} options
+ */
+function applyChromiumFamilyLaunchArgs(options) {
+  options.args.push("--disable-crash-reporter", "--disable-crashpad");
+  // Headed login/export: avoid --enable-automation chrome banner / extra bot signals.
+  if (headed || setupMode || exportStateMode) {
+    options.ignoreDefaultArgs = ["--enable-automation"];
+    options.args.push("--disable-blink-features=AutomationControlled");
+  }
+}
+
+/**
+ * Build Playwright launcher + options for the selected engine.
+ * Chrome remains the recommended default; Edge and Firefox are opt-in fallbacks.
+ * @param {"chrome" | "edge" | "firefox"} choice
+ */
+function resolveBrowserEngine(choice) {
+  /** @type {import("playwright").LaunchOptions} */
+  const options = {
+    headless: !headed,
+    args: []
+  };
+
+  if (choice === "firefox") {
+    const installed = resolveInstalledFirefox();
+    if (installed?.channel) {
+      options.channel = installed.channel;
+    } else if (installed?.executablePath) {
+      options.executablePath = installed.executablePath;
+    }
+    return {
+      choice: "firefox",
+      launcher: firefox,
+      options,
+      installed,
+      fallbackLabel: "Playwright Firefox (system Firefox not found)"
+    };
+  }
+
+  applyChromiumFamilyLaunchArgs(options);
+
+  if (choice === "edge") {
+    const installed = resolveInstalledEdge();
+    if (installed?.channel) {
+      options.channel = installed.channel;
+    } else if (installed?.executablePath) {
+      options.executablePath = installed.executablePath;
+    }
+    return {
+      choice: "edge",
+      launcher: chromium,
+      options,
+      installed,
+      fallbackLabel: "Microsoft Edge (channel msedge; install Edge if launch fails)"
+    };
+  }
+
+  const installed = resolveInstalledChrome();
+  if (installed?.channel) {
+    options.channel = installed.channel;
+  } else if (installed?.executablePath) {
+    options.executablePath = installed.executablePath;
+  }
+
+  return {
+    choice: "chrome",
+    launcher: chromium,
+    options,
+    installed,
+    fallbackLabel: "Playwright Chromium (system Chrome not found)"
+  };
+}
+
+/**
+ * @param {"chrome" | "edge" | "firefox"} choice
+ */
+function browserEngineLogLabel(choice) {
+  if (choice === "firefox") return "Firefox (fallback)";
+  if (choice === "edge") return "Microsoft Edge (fallback)";
+  return "Chrome/Chromium (default)";
+}
+
+function describeBrowserEngine(engine) {
+  if (engine.installed) {
+    return engine.installed.label;
+  }
+  return engine.fallbackLabel;
+}
+
 async function applyStealthInit(context) {
   // Reduce obvious automation signals that some sites treat as bot (reload/challenge loops).
   await context.addInitScript(() => {
@@ -1032,25 +1263,11 @@ async function applyStealthInit(context) {
 
 async function main() {
   log(`Opening ${signInUrl}`);
-  const browserOptions = {
-    headless: !headed,
-    args: [
-      "--disable-crash-reporter",
-      "--disable-crashpad"
-    ]
-  };
-
-  // Headed login/export: avoid --enable-automation chrome banner / extra bot signals.
-  if (headed || setupMode || exportStateMode) {
-    browserOptions.ignoreDefaultArgs = ["--enable-automation"];
-    browserOptions.args.push("--disable-blink-features=AutomationControlled");
-  }
-
-  const installedChrome = resolveInstalledChrome();
-  if (installedChrome?.channel) {
-    browserOptions.channel = installedChrome.channel;
-  } else if (installedChrome?.executablePath) {
-    browserOptions.executablePath = installedChrome.executablePath;
+  const engine = resolveBrowserEngine(browserChoice);
+  const browserOptions = engine.options;
+  log(`Browser engine: ${browserEngineLogLabel(engine.choice)}`);
+  if (engine.choice === "firefox" || engine.choice === "edge") {
+    log(`Note: ${engine.choice === "edge" ? "Edge" : "Firefox"} is a backup option. Re-export login state with the same browser you use for sign-in when possible.`);
   }
 
   const contextOptions = {
@@ -1062,12 +1279,8 @@ async function main() {
   const storageStates = selectScheduledStorageState(collectStorageStates());
   if (storageStates.length > 0 || process.env.GITHUB_ACTIONS === "true" || process.env.MUSICFUL_AUTO_SUMMARY === "1") {
     log(`Found ${storageStates.length} Musicful account storage state(s).`);
-    if (installedChrome) {
-      log(`Browser: ${installedChrome.label}`);
-    } else {
-      log("Browser: Playwright Chromium (system Chrome not found).");
-    }
-    const browser = storageStates.length > 0 ? await chromium.launch(browserOptions) : null;
+    log(`Browser: ${describeBrowserEngine(engine)}`);
+    const browser = storageStates.length > 0 ? await engine.launcher.launch(browserOptions) : null;
     let failures = 0;
     /** @type {ReturnType<typeof writeSignInResult>[]} */
     const results = [];
@@ -1151,12 +1364,11 @@ async function main() {
 
   let context;
   if (!storageStateBase64) {
-    if (installedChrome) {
-      log(`Using installed Google Chrome: ${installedChrome.label}`);
-    } else {
-      log("Using Playwright Chromium (system Chrome not found). Install Chrome for more stable headed login/export.");
+    log(`Using browser: ${describeBrowserEngine(engine)}`);
+    if (engine.choice === "chrome" && !engine.installed) {
+      log("Tip: install Google Chrome for more stable headed login/export, or pass --browser edge / --browser firefox as a fallback.");
     }
-    context = await chromium.launchPersistentContext(profileDir, {
+    context = await engine.launcher.launchPersistentContext(profileDir, {
       ...browserOptions,
       ...contextOptions
     });

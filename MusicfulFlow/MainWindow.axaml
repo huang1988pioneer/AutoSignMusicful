@@ -59,6 +59,9 @@
           <Border Classes="panel"><StackPanel Spacing="14">
             <TextBlock Text="選擇帳號" FontSize="19" FontWeight="SemiBold"/>
             <ComboBox x:Name="AccountComboBox" Width="210" SelectedIndex="0" SelectionChanged="AccountComboBox_OnSelectionChanged"/>
+            <TextBlock Text="瀏覽器" FontSize="14" FontWeight="SemiBold" Margin="0,4,0,0"/>
+            <ComboBox x:Name="BrowserComboBox" Width="320" SelectedIndex="0"/>
+            <TextBlock Classes="muted" Text="預設使用 Chrome／Chromium；若無法登入可改選 Edge 或 Firefox 備案。請用同一瀏覽器完成匯出與後續驗證。" TextWrapping="Wrap" FontSize="12"/>
             <Border Background="#E8F1FB" CornerRadius="7" Padding="12,8"><TextBlock x:Name="SecretNameText" FontFamily="Consolas" Foreground="#125799"/></Border>
             <Button x:Name="StartLoginButton" Classes="primary" HorizontalAlignment="Left" Click="StartLoginButton_OnClick">開始登入並匯出</Button>
             <StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="CopyStateButton" IsEnabled="False" Click="CopyStateButton_OnClick">複製 Base64</Button><Button x:Name="CopySecretButton" Click="CopySecretButton_OnClick">複製 Secret 名稱</Button></StackPanel>

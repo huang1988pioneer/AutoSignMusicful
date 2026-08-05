@@ -18,6 +18,13 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         AccountComboBox.ItemsSource = Enumerable.Range(1, AccountCount).Select(i => $"帳號 {i:00}").ToArray();
+        BrowserComboBox.ItemsSource = new[]
+        {
+            "Chrome / Chromium（建議）",
+            "Microsoft Edge（備案）",
+            "Firefox（備案）"
+        };
+        BrowserComboBox.SelectedIndex = 0;
         BuildAliasList();
         ConfiguredMetric.Text = $"{_aliases.Count} 個";
         UpdateAccountDisplay();
@@ -25,6 +32,12 @@ public partial class MainWindow : Window
 
     private int AccountNumber => AccountComboBox.SelectedIndex + 1;
     private string ProfileName => $"musicful-{AccountNumber:00}";
+    private string BrowserName => BrowserComboBox.SelectedIndex switch
+    {
+        1 => "edge",
+        2 => "firefox",
+        _ => "chrome"
+    };
     private string StateFile => Path.Combine(_workspace, "logs", $"musicful-storage-state-{ProfileName}.base64");
     private string SecretName => $"MUSICFUL_STORAGE_STATE_BASE64_{AccountNumber}";
     private static string AliasFile => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MusicfulFlow", "account-aliases.json");
@@ -56,11 +69,30 @@ public partial class MainWindow : Window
         CopyStateButton.IsEnabled = false;
         try
         {
-            LoginStatus.Text = "正在確認 Node.js 相依套件與 Chromium…";
+            LoginStatus.Text = BrowserName switch
+            {
+                "firefox" => "正在確認 Node.js 相依套件與 Firefox…",
+                "edge" => "正在確認 Node.js 相依套件與 Microsoft Edge…",
+                _ => "正在確認 Node.js 相依套件與 Chromium…"
+            };
             await RunProcessAsync("npm", ["install"]);
-            await RunProcessAsync("npx", ["playwright", "install", "chromium"]);
-            LoginStatus.Text = "瀏覽器已開啟。請完成登入並停留在成長中心；請勿關閉瀏覽器，工具會在偵測成功後自動匯出。";
-            await RunProcessAsync("npm", ["run", "export-state", "--", "--profile", ProfileName]);
+            // Edge uses the system Microsoft Edge via Playwright channel=msedge (no separate browser download required).
+            // Still ensure chromium is present as Playwright core dependency for chromium-family launches.
+            if (BrowserName == "firefox")
+            {
+                await RunProcessAsync("npx", ["playwright", "install", "firefox"]);
+            }
+            else
+            {
+                await RunProcessAsync("npx", ["playwright", "install", "chromium"]);
+            }
+            LoginStatus.Text = BrowserName switch
+            {
+                "firefox" => "Firefox 已開啟（備案）。請完成登入並停留在成長中心；請勿關閉瀏覽器，工具會在偵測成功後自動匯出。",
+                "edge" => "Microsoft Edge 已開啟（備案）。請完成登入並停留在成長中心；請勿關閉瀏覽器，工具會在偵測成功後自動匯出。",
+                _ => "瀏覽器已開啟。請完成登入並停留在成長中心；請勿關閉瀏覽器，工具會在偵測成功後自動匯出。"
+            };
+            await RunProcessAsync("npm", ["run", "export-state", "--", "--profile", ProfileName, "--browser", BrowserName]);
             if (!File.Exists(StateFile)) throw new InvalidOperationException("未找到匯出的登入狀態檔。請確認你已在瀏覽器中登入 Musicful。");
             LoginStatus.Text = $"完成。已建立 {Path.GetFileName(StateFile)}；可複製後貼到 GitHub Secret {SecretName}。";
             CopyStateButton.IsEnabled = true;
@@ -89,7 +121,7 @@ public partial class MainWindow : Window
         try
         {
             PointsStatus.Text = "正在讀取 Musicful 成長中心…";
-            var output = await RunProcessCaptureAsync("node", ["scripts/musicful-read-points.mjs", "--profile", ProfileName]);
+            var output = await RunProcessCaptureAsync("node", ["scripts/musicful-read-points.mjs", "--profile", ProfileName, "--browser", BrowserName]);
             var points = JsonSerializer.Deserialize<PointsSnapshot>(output.Trim(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                 ?? throw new InvalidOperationException("積分資料格式無法解析。");
             var music = points.MusicPoints is null ? "—" : points.MusicPointsMax is null ? points.MusicPoints.ToString() : $"{points.MusicPoints} / {points.MusicPointsMax}";
