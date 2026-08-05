@@ -154,7 +154,30 @@ public partial class MainWindow : Window
 
     private static Dictionary<int, string> LoadAliases()
     {
-        var aliases = new Dictionary<int, string> { [1] = "goldshoot0720" };
+        var aliases = new Dictionary<int, string>
+        {
+            [1] = "goldshoot0720",
+            [2] = "abuhg17",
+            [3] = "fengtuprinfo",
+            [4] = "feng33feng35feng3",
+            [5] = "chbondg2",
+            [6] = "huang1988pioneer",
+            [7] = "chbondg_outloook",
+            [8] = "gaokaolevel3iptopscorer_outlook",
+            [9] = "huang1988pioneer_outloook",
+            [10] = "fengtuta_tuta",
+            [11] = "fengfence_fence",
+            [12] = "samafengtu",
+            [13] = "fengtusama",
+            [14] = "fengwithting0831",
+            [15] = "fengwithfeng1127",
+            [16] = "fengwithtu1127",
+            [17] = "akaonda333",
+            [18] = "fbussinesseng",
+            [19] = "engdictatorf",
+            [20] = "flottojackpoteng",
+            [21] = "tushenbyfengbro"
+        };
         try
         {
             if (!File.Exists(AliasFile)) return aliases;
