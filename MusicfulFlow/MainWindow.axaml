@@ -1,5 +1,5 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="MusicfulFlow.MainWindow"
-        Title="Musicful Flow" Width="1000" Height="760" MinWidth="820" MinHeight="620" Background="#F4F7FB">
+        Title="Musicful Flow" Width="1000" Height="860" MinWidth="1000" MinHeight="860" Background="#F4F7FB">
   <Window.Styles>
     <Style Selector="Border.panel"><Setter Property="Background" Value="#FFFFFF"/><Setter Property="CornerRadius" Value="14"/><Setter Property="Padding" Value="24"/></Style>
     <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#65758B"/></Style>
@@ -23,7 +23,7 @@
           <Button Classes="nav" Click="AccountsNavButton_OnClick">帳號設定</Button>
           <Button Classes="nav" Click="LoginNavButton_OnClick">更新登入狀態</Button>
         </StackPanel>
-        <TextBlock Text="排程：台灣時間 05:06、17:06" FontSize="12" Foreground="#8FB9DB" Margin="0,18,0,0"/>
+        <TextBlock Text="排程：台灣時間 05、13、21 點；每次隨機延遲 0–59 分鐘" TextWrapping="Wrap" FontSize="12" Foreground="#8FB9DB" Margin="0,18,0,0"/>
       </StackPanel>
     </Border>
     <ScrollViewer Grid.Column="1" Margin="38,34,24,24" HorizontalScrollBarVisibility="Disabled">
@@ -40,10 +40,12 @@
             </Grid>
             <Border Height="1" Background="#DCE5EF"/>
             <Grid ColumnDefinitions="*,*" ColumnSpacing="24">
-              <StackPanel Spacing="4"><TextBlock Classes="muted" Text="本月累計簽到" FontSize="12"/><TextBlock x:Name="MonthlyStreakMetric" Text="—" FontSize="18" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
+              <StackPanel Spacing="4"><TextBlock Classes="muted" Text="本月簽到帳號" FontSize="12"/><TextBlock x:Name="MonthlyStreakMetric" Text="—" FontSize="18" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
               <StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="完成時間" FontSize="12"/><TextBlock x:Name="RunTimeMetric" Text="—" FontSize="18" FontWeight="SemiBold"/></StackPanel>
             </Grid>
             <TextBlock x:Name="DashboardStatus" Classes="muted" Text="執行後可在 GitHub Actions 檢視各帳號的成功、失敗與未設定狀態。" TextWrapping="Wrap"/>
+            <TextBlock Text="本月簽到明細" FontSize="16" FontWeight="SemiBold"/>
+            <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="MonthlyAccountsPanel" Spacing="7"/></ScrollViewer>
           </StackPanel></Border>
         </StackPanel>
         <StackPanel x:Name="AccountsView" IsVisible="False" Spacing="18">

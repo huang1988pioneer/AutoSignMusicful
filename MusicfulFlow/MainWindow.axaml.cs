@@ -120,8 +120,10 @@ public partial class MainWindow : Window
             if (run is null) { RunMetric.Text = "尚無執行紀錄"; MonthlyStreakMetric.Text = "—"; RunTimeMetric.Text = "—"; DashboardStatus.Text = "尚未找到 Musicful Auto Sign 執行紀錄。"; return; }
             RunMetric.Text = string.IsNullOrWhiteSpace(run.Conclusion) ? run.Status : run.Conclusion;
             RunTimeMetric.Text = TimeZoneInfo.ConvertTime(run.UpdatedAt, GetTaipeiZone()).ToString("MM/dd HH:mm");
-            var summary = await _github.GetMonthlySignInSummaryAsync(repository, run.DatabaseId);
-            MonthlyStreakMetric.Text = summary is null ? "—" : $"{summary.TotalDays} 天（{summary.AccountCount} 個帳號）";
+            var accounts = await _github.GetAccountMonthlyStatusesAsync(repository, run.DatabaseId);
+            var configured = accounts.Count(account => account.IsConfigured);
+            MonthlyStreakMetric.Text = $"{configured} 已設定 · {accounts.Length - configured} 未設定";
+            RenderMonthlyAccounts(accounts);
             DashboardStatus.Text = $"最近執行：{run.Url}";
         });
     }
@@ -132,6 +134,28 @@ public partial class MainWindow : Window
         try { await action(); }
         catch (Exception ex) { DashboardStatus.Text = $"GitHub Actions 操作失敗：{ex.Message}"; }
         finally { TriggerButton.IsEnabled = RefreshButton.IsEnabled = true; }
+    }
+
+    private void RenderMonthlyAccounts(IEnumerable<AccountMonthlyStatus> accounts)
+    {
+        MonthlyAccountsPanel.Children.Clear();
+        foreach (var account in accounts)
+        {
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("68,*,100") };
+            row.Children.Add(new TextBlock { Text = $"#{account.Number:00}", FontWeight = Avalonia.Media.FontWeight.SemiBold });
+            var alias = new TextBlock { Text = account.Alias, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
+            Grid.SetColumn(alias, 1);
+            row.Children.Add(alias);
+            var state = new TextBlock
+            {
+                Text = account.IsConfigured ? $"本月 {account.Days ?? 0} 天" : "未設定",
+                Foreground = account.IsConfigured ? Avalonia.Media.Brushes.SeaGreen : Avalonia.Media.Brushes.Gray,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
+            };
+            Grid.SetColumn(state, 2);
+            row.Children.Add(state);
+            MonthlyAccountsPanel.Children.Add(row);
+        }
     }
 
     private void BuildAliasList()

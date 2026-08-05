@@ -8,9 +8,10 @@ on:
         required: false
         default: "all"
   schedule:
-    # Taiwan time: daily 05:06 and 17:06.
-    - cron: "6 21 * * *"
-    - cron: "6 9 * * *"
+    # Taiwan time: 05:00, 13:00, and 21:00. The job randomizes its start by up to 59 minutes.
+    - cron: "0 21 * * *"
+    - cron: "0 5 * * *"
+    - cron: "0 13 * * *"
 
 permissions:
   contents: read
@@ -19,7 +20,7 @@ jobs:
   signin:
     name: daily-signin
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       MUSICFUL_MAX_ACCOUNTS: "33"
       MUSICFUL_SCHEDULE_MODE: "all"
@@ -82,6 +83,14 @@ jobs:
 
       - name: Install browser
         run: npx playwright install --with-deps chromium
+
+      - name: Randomize scheduled start
+        if: github.event_name == 'schedule'
+        shell: bash
+        run: |
+          delay_seconds=$((RANDOM % 3600))
+          echo "Scheduled start delay: ${delay_seconds} seconds"
+          sleep "$delay_seconds"
 
       - name: Run Musicful sign-ins
         run: npm run signin

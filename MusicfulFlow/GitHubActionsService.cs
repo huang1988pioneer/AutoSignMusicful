@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -21,21 +22,43 @@ internal sealed class GitHubActionsService
         return JsonSerializer.Deserialize<List<RunInfo>>(output, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.FirstOrDefault();
     }
 
-    public async Task<MonthlySignInSummary?> GetMonthlySignInSummaryAsync(string repository, long runId)
+    public async Task<AccountMonthlyStatus[]> GetAccountMonthlyStatusesAsync(string repository, long runId)
     {
         var output = await RunGhAsync(["run", "view", runId.ToString(), "--repo", repository, "--log"]);
-        var values = Regex.Matches(output, @"- #\d+ .*?\|\s*連續\s+(\d+)\s*\|")
-            .Select(match => int.TryParse(match.Groups[1].Value, out var days) ? days : 0)
-            .Where(days => days > 0)
+        var matches = Regex.Matches(
+                output,
+                @"-\s*#(?<number>\d+)\s+(?<alias>[^:\r\n]+):\s*✅.*?\|\s*連續\s+(?<days>\d+)\s*\|",
+                RegexOptions.Multiline)
+            .Select(match => new AccountMonthlyStatus(
+                int.Parse(match.Groups["number"].Value),
+                match.Groups["alias"].Value.Trim(),
+                int.Parse(match.Groups["days"].Value),
+                true))
+            .ToDictionary(status => status.Number);
+
+        return Enumerable.Range(1, 33)
+            .Select(number => matches.GetValueOrDefault(number)
+                ?? new AccountMonthlyStatus(number, $"account_{number}", null, false))
             .ToArray();
-        return values.Length == 0 ? null : new MonthlySignInSummary(values.Sum(), values.Length);
     }
 
     public async Task<string> GetRepositoryAsync() => (await RunGhAsync(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])).Trim();
 
     private static async Task<string> RunGhAsync(IEnumerable<string> arguments)
     {
-        using var process = new Process { StartInfo = new ProcessStartInfo { FileName = "gh", UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true } };
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gh",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
+                CreateNoWindow = true
+            }
+        };
         foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
         if (!process.Start()) throw new InvalidOperationException("無法啟動 GitHub CLI (gh)。請先安裝並執行 gh auth login。");
         var stdout = process.StandardOutput.ReadToEndAsync();
@@ -49,4 +72,4 @@ internal sealed class GitHubActionsService
 }
 
 internal sealed record RunInfo(long DatabaseId, string Status, string? Conclusion, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string Url);
-internal sealed record MonthlySignInSummary(int TotalDays, int AccountCount);
+internal sealed record AccountMonthlyStatus(int Number, string Alias, int? Days, bool IsConfigured);
