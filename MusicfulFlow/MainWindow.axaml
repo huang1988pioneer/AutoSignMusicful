@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="MusicfulFlow.MainWindow"
+        Title="Musicful Flow" Width="1000" Height="760" MinWidth="820" MinHeight="620" Background="#F4F7FB">
+  <Window.Styles>
+    <Style Selector="Border.panel"><Setter Property="Background" Value="#FFFFFF"/><Setter Property="CornerRadius" Value="14"/><Setter Property="Padding" Value="24"/></Style>
+    <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#65758B"/></Style>
+    <Style Selector="Button.nav"><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="HorizontalContentAlignment" Value="Left"/><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="#BED5EB"/><Setter Property="Padding" Value="13,10"/><Setter Property="CornerRadius" Value="7"/></Style>
+    <Style Selector="Button.nav:pointerover"><Setter Property="Background" Value="#203B5C"/><Setter Property="Foreground" Value="White"/></Style>
+    <Style Selector="Button.primary"><Setter Property="Background" Value="#1976D2"/><Setter Property="Foreground" Value="White"/><Setter Property="Padding" Value="17,10"/></Style>
+  </Window.Styles>
+  <Grid ColumnDefinitions="244,*">
+    <Border Background="#102A43" Padding="25">
+      <StackPanel Spacing="20">
+        <StackPanel Spacing="6">
+          <TextBlock Text="Musicful Flow" FontSize="24" FontWeight="Bold" Foreground="White"/>
+          <TextBlock Text="自動簽到控制台" Foreground="#A9CCE8"/>
+          <TextBlock Text="管理登入狀態、GitHub Actions 與每日簽到結果。" TextWrapping="Wrap" FontSize="12" Foreground="#8FB9DB" Margin="0,8,0,0"/>
+        </StackPanel>
+        <Border Background="#193958" CornerRadius="10" Padding="14">
+          <StackPanel Spacing="6"><TextBlock Text="安全提醒" FontWeight="SemiBold" Foreground="White"/><TextBlock Text="登入、OTP 與 CAPTCHA 必須由你在瀏覽器中完成。此工具只會匯出登入狀態。" TextWrapping="Wrap" FontSize="12" Foreground="#BED5EB"/></StackPanel>
+        </Border>
+        <StackPanel Spacing="5">
+          <Button Classes="nav" Click="DashboardNavButton_OnClick">簽到總覽</Button>
+          <Button Classes="nav" Click="AccountsNavButton_OnClick">帳號設定</Button>
+          <Button Classes="nav" Click="LoginNavButton_OnClick">更新登入狀態</Button>
+        </StackPanel>
+        <TextBlock Text="排程：台灣時間 05:06、17:06" FontSize="12" Foreground="#8FB9DB" Margin="0,18,0,0"/>
+      </StackPanel>
+    </Border>
+    <ScrollViewer Grid.Column="1" Margin="38,34,24,24" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel MaxWidth="650" Spacing="18">
+        <StackPanel x:Name="DashboardView" Spacing="18">
+          <TextBlock Text="簽到總覽" FontSize="30" FontWeight="SemiBold" Foreground="#132A42"/>
+          <TextBlock Classes="muted" Text="從目前 GitHub repository 讀取最近一次 Musicful Auto Sign 執行狀態。" TextWrapping="Wrap"/>
+          <Border Classes="panel"><StackPanel Spacing="16">
+            <TextBlock Text="GitHub Actions" FontSize="19" FontWeight="SemiBold"/>
+            <StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="TriggerButton" Classes="primary" Click="TriggerButton_OnClick">立即執行簽到</Button><Button x:Name="RefreshButton" Click="RefreshButton_OnClick">重新整理</Button></StackPanel>
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="28"><StackPanel Spacing="4"><TextBlock Classes="muted" Text="最近執行" FontSize="12"/><TextBlock x:Name="RunMetric" Text="尚未讀取" FontSize="18" FontWeight="SemiBold"/></StackPanel><StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="完成時間" FontSize="12"/><TextBlock x:Name="RunTimeMetric" Text="—" FontSize="18" FontWeight="SemiBold"/></StackPanel></Grid>
+            <TextBlock x:Name="DashboardStatus" Classes="muted" Text="按下「重新整理」以讀取 GitHub Actions。" TextWrapping="Wrap"/>
+          </StackPanel></Border>
+        </StackPanel>
+        <StackPanel x:Name="AccountsView" IsVisible="False" Spacing="18">
+          <TextBlock Text="帳號設定" FontSize="30" FontWeight="SemiBold" Foreground="#132A42"/>
+          <TextBlock Classes="muted" Text="名稱只保存在本機，用於讓 33 個 GitHub Secret 更容易辨識。" TextWrapping="Wrap"/>
+          <Border Classes="panel"><StackPanel Spacing="12"><TextBlock Text="帳號別名" FontSize="19" FontWeight="SemiBold"/><ScrollViewer MaxHeight="410"><StackPanel x:Name="AliasPanel" Spacing="8"/></ScrollViewer><Button HorizontalAlignment="Left" Click="SaveAliasesButton_OnClick">儲存本機別名</Button></StackPanel></Border>
+        </StackPanel>
+        <StackPanel x:Name="LoginView" IsVisible="False" Spacing="18">
+          <TextBlock Text="更新登入狀態" FontSize="30" FontWeight="SemiBold" Foreground="#132A42"/>
+          <TextBlock Classes="muted" Text="開啟瀏覽器完成登入後，關閉瀏覽器即可匯出該帳號的 Storage State。" TextWrapping="Wrap"/>
+          <Border Classes="panel"><StackPanel Spacing="14">
+            <TextBlock Text="選擇帳號" FontSize="19" FontWeight="SemiBold"/>
+            <ComboBox x:Name="AccountComboBox" Width="210" SelectedIndex="0" SelectionChanged="AccountComboBox_OnSelectionChanged"/>
+            <Border Background="#E8F1FB" CornerRadius="7" Padding="12,8"><TextBlock x:Name="SecretNameText" FontFamily="Consolas" Foreground="#125799"/></Border>
+            <Button x:Name="StartLoginButton" Classes="primary" HorizontalAlignment="Left" Click="StartLoginButton_OnClick">開始登入並匯出</Button>
+            <StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="CopyStateButton" IsEnabled="False" Click="CopyStateButton_OnClick">複製 Base64</Button><Button x:Name="CopySecretButton" Click="CopySecretButton_OnClick">複製 Secret 名稱</Button></StackPanel>
+            <TextBlock x:Name="LoginStatus" Classes="muted" Text="匯出後，將 Base64 貼到對應的 GitHub Actions Secret。" TextWrapping="Wrap"/>
+          </StackPanel></Border>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</Window>
