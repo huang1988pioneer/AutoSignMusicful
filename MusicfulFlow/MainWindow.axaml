@@ -34,10 +34,11 @@
           <Border Classes="panel"><StackPanel Spacing="18">
             <TextBlock Text="GitHub Actions 儀表板" FontSize="20" FontWeight="SemiBold"/>
             <StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="TriggerButton" Classes="primary" Click="TriggerButton_OnClick">立即執行簽到</Button><Button x:Name="RefreshButton" Click="RefreshButton_OnClick">更新執行結果</Button></StackPanel>
-            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="24">
-              <StackPanel Spacing="4"><TextBlock Classes="muted" Text="已設定帳號" FontSize="12"/><TextBlock x:Name="ConfiguredMetric" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
-              <StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="最近執行" FontSize="12"/><TextBlock x:Name="RunMetric" Text="尚未讀取" FontSize="22" FontWeight="SemiBold"/></StackPanel>
-              <StackPanel Grid.Column="2" Spacing="4"><TextBlock Classes="muted" Text="完成時間" FontSize="12"/><TextBlock x:Name="RunTimeMetric" Text="—" FontSize="18" FontWeight="SemiBold"/></StackPanel>
+            <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="18">
+              <StackPanel Spacing="4"><TextBlock Classes="muted" Text="已設定帳號" FontSize="12"/><TextBlock x:Name="ConfiguredMetric" Text="—" FontSize="20" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
+              <StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="最近執行" FontSize="12"/><TextBlock x:Name="RunMetric" Text="尚未讀取" FontSize="20" FontWeight="SemiBold"/></StackPanel>
+              <StackPanel Grid.Column="2" Spacing="4"><TextBlock Classes="muted" Text="最長連續簽到" FontSize="12"/><TextBlock x:Name="StreakMetric" Text="—" FontSize="20" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
+              <StackPanel Grid.Column="3" Spacing="4"><TextBlock Classes="muted" Text="完成時間" FontSize="12"/><TextBlock x:Name="RunTimeMetric" Text="—" FontSize="16" FontWeight="SemiBold"/></StackPanel>
             </Grid>
             <Border Height="1" Background="#DCE5EF"/>
             <TextBlock x:Name="DashboardStatus" Classes="muted" Text="執行後可在 GitHub Actions 檢視各帳號的成功、失敗與未設定狀態。" TextWrapping="Wrap"/>

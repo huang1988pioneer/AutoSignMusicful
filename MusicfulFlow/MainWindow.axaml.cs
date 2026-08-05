@@ -101,9 +101,10 @@ public partial class MainWindow : Window
             DashboardStatus.Text = "正在讀取 GitHub Actions…";
             var repository = await _github.GetRepositoryAsync();
             var run = await _github.GetLatestAsync(repository);
-            if (run is null) { RunMetric.Text = "尚無執行紀錄"; RunTimeMetric.Text = "—"; DashboardStatus.Text = "尚未找到 Musicful Auto Sign 執行紀錄。"; return; }
+            if (run is null) { RunMetric.Text = "尚無執行紀錄"; StreakMetric.Text = "—"; RunTimeMetric.Text = "—"; DashboardStatus.Text = "尚未找到 Musicful Auto Sign 執行紀錄。"; return; }
             RunMetric.Text = string.IsNullOrWhiteSpace(run.Conclusion) ? run.Status : run.Conclusion;
             RunTimeMetric.Text = TimeZoneInfo.ConvertTime(run.UpdatedAt, GetTaipeiZone()).ToString("MM/dd HH:mm");
+            StreakMetric.Text = (await _github.GetLongestStreakAsync(repository, run.DatabaseId)) is { } longest ? $"{longest} 天" : "—";
             DashboardStatus.Text = $"最近執行：{run.Url}";
         });
     }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace MusicfulFlow;
 
@@ -16,8 +17,17 @@ internal sealed class GitHubActionsService
 
     public async Task<RunInfo?> GetLatestAsync(string repository)
     {
-        var output = await RunGhAsync(["run", "list", "--workflow", Workflow, "--repo", repository, "--limit", "1", "--json", "status,conclusion,createdAt,updatedAt,url"]);
+        var output = await RunGhAsync(["run", "list", "--workflow", Workflow, "--repo", repository, "--limit", "1", "--json", "databaseId,status,conclusion,createdAt,updatedAt,url"]);
         return JsonSerializer.Deserialize<List<RunInfo>>(output, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.FirstOrDefault();
+    }
+
+    public async Task<int?> GetLongestStreakAsync(string repository, long runId)
+    {
+        var output = await RunGhAsync(["run", "view", runId.ToString(), "--repo", repository, "--log"]);
+        var values = Regex.Matches(output, @"連續\s+(\d+)")
+            .Select(match => int.TryParse(match.Groups[1].Value, out var days) ? days : 0)
+            .Where(days => days > 0);
+        return values.DefaultIfEmpty().Max() is var longest && longest > 0 ? longest : null;
     }
 
     public async Task<string> GetRepositoryAsync() => (await RunGhAsync(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])).Trim();
@@ -37,4 +47,4 @@ internal sealed class GitHubActionsService
     }
 }
 
-internal sealed record RunInfo(string Status, string? Conclusion, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string Url);
+internal sealed record RunInfo(long DatabaseId, string Status, string? Conclusion, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string Url);
