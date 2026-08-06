@@ -40,11 +40,11 @@
             </Grid>
             <Border Height="1" Background="#DCE5EF"/>
             <Grid ColumnDefinitions="*,*" ColumnSpacing="24">
-              <StackPanel Spacing="4"><TextBlock Classes="muted" Text="本月簽到帳號" FontSize="12"/><TextBlock x:Name="MonthlyStreakMetric" Text="—" FontSize="18" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
+              <StackPanel Spacing="4"><TextBlock Classes="muted" Text="已紀錄連續簽到" FontSize="12"/><TextBlock x:Name="MonthlyStreakMetric" Text="—" FontSize="18" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
               <StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="完成時間" FontSize="12"/><TextBlock x:Name="RunTimeMetric" Text="—" FontSize="18" FontWeight="SemiBold"/></StackPanel>
             </Grid>
-            <TextBlock x:Name="DashboardStatus" Classes="muted" Text="執行後可在 GitHub Actions 檢視各帳號的成功、失敗與未設定狀態。" TextWrapping="Wrap"/>
-            <TextBlock Text="本月簽到明細" FontSize="16" FontWeight="SemiBold"/>
+            <TextBlock x:Name="DashboardStatus" Classes="muted" Text="執行後可在 GitHub Actions 檢視各帳號的成功、失敗與連續簽到天數。" TextWrapping="Wrap"/>
+            <TextBlock Text="各帳號連續簽到天數" FontSize="16" FontWeight="SemiBold"/>
             <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="MonthlyAccountsPanel" Spacing="7"/></ScrollViewer>
           </StackPanel></Border>
         </StackPanel>

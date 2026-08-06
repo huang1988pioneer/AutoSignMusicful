@@ -57,7 +57,9 @@ try {
     musicPoints: readMatch(text, /(\d+)\s*\/\s*\d+\s*音樂點/),
     musicPointsMax: readMatch(text, /\d+\s*\/\s*(\d+)\s*音樂點/),
     points: readMatch(text, /(?<!成長)積分[\s：:]*(\d+)/),
-    streakDays: readMatch(text, /累計\s*[：:]\s*(\d+)\s*天/),
+    streakDays: readMatch(text, /累[計计]\s*[：:]?\s*(\d+)\s*天/)
+      ?? readMatch(text, /[連连][續续][簽签]到\s*[：:]?\s*(\d+)/)
+      ?? readMatch(text, /streak\s*[：:]?\s*(\d+)/i),
     fetchedAt: new Date().toISOString()
   };
   if (Object.values(result).slice(0, 5).every((value) => value === null)) {

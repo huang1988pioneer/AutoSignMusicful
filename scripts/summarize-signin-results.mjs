@@ -148,6 +148,41 @@ function noteForRow(row) {
   return compactMessage(row.message, 80);
 }
 
+/** Aggregate continuous sign-in day stats for ran (non-skipped) accounts. */
+function buildStreakStats(rows) {
+  const ranRows = rows.filter((r) => r.status !== "skipped");
+  // Do not use Number(null) — it becomes 0 and would falsely count missing streaks.
+  const values = [];
+  for (const row of ranRows) {
+    if (row.streakDays == null || row.streakDays === "") continue;
+    const n = Number(row.streakDays);
+    if (Number.isFinite(n)) values.push(n);
+  }
+  const recorded = values.length;
+  const missing = ranRows.length - recorded;
+  if (recorded === 0) {
+    return {
+      total: ranRows.length,
+      recorded: 0,
+      missing: ranRows.length,
+      min: null,
+      max: null,
+      avg: null,
+      sum: null
+    };
+  }
+  const sum = values.reduce((acc, n) => acc + n, 0);
+  return {
+    total: ranRows.length,
+    recorded,
+    missing,
+    min: Math.min(...values),
+    max: Math.max(...values),
+    avg: Math.round((sum / recorded) * 10) / 10,
+    sum
+  };
+}
+
 function buildMarkdown(rows, meta = {}) {
   const configuredRows = rows.filter((r) => r.status !== "skipped");
   const checkedIn = rows.filter((r) => r.status === "checked_in");
@@ -161,6 +196,7 @@ function buildMarkdown(rows, meta = {}) {
     (r) => !["checked_in", "already_done", "skipped", "failed"].includes(r.status)
   );
 
+  const streakStats = buildStreakStats(rows);
   const counts = {
     total: rows.length,
     configured: configuredRows.length,
@@ -171,7 +207,13 @@ function buildMarkdown(rows, meta = {}) {
     skipped_not_selected: notSelectedRows.length,
     failed: failedRows.length,
     unknown: unknownRows.length,
-    ok: checkedIn.length + alreadyDone.length
+    ok: checkedIn.length + alreadyDone.length,
+    streak_recorded: streakStats.recorded,
+    streak_missing: streakStats.missing,
+    streak_min: streakStats.min,
+    streak_max: streakStats.max,
+    streak_avg: streakStats.avg,
+    streak_sum: streakStats.sum
   };
 
   const generatedAt = meta.generatedAt || new Date().toISOString();
@@ -206,6 +248,12 @@ function buildMarkdown(rows, meta = {}) {
       ? `| 略過（本次未選） | ${counts.skipped_not_selected} |`
       : null,
     counts.unknown ? `| 其他 | ${counts.unknown} |` : null,
+    counts.configured > 0
+      ? `| 已紀錄連續簽到 | ${streakStats.recorded}/${streakStats.total} |`
+      : null,
+    streakStats.recorded > 0
+      ? `| 連續簽到天數（最高 / 最低 / 平均） | ${fmtNum(streakStats.max)} / ${fmtNum(streakStats.min)} / ${fmtNum(streakStats.avg)} |`
+      : null,
     "",
     accountMin != null && accountMax != null
       ? `<sub>帳號 ${accountMin}–${accountMax} · ${generatedAt}</sub>`
@@ -233,7 +281,7 @@ function buildMarkdown(rows, meta = {}) {
   const ranRows = rows.filter((r) => r.status !== "skipped");
   if (ranRows.length > 0) {
     lines.push("### 各帳號結果", "");
-    lines.push("| # | 帳號 | 狀態 | 成長點 | 音樂點 | 連續 | 備註 |");
+    lines.push("| # | 帳號 | 狀態 | 成長點 | 音樂點 | 連續簽到天數 | 備註 |");
     lines.push("| ---: | --- | --- | ---: | ---: | ---: | --- |");
     for (const row of ranRows) {
       const no = row.account ?? "—";
@@ -244,6 +292,31 @@ function buildMarkdown(rows, meta = {}) {
       );
     }
     lines.push("");
+
+    // Always list every ran account so missing streaks stay visible as "—".
+    lines.push("### 連續簽到天數", "");
+    lines.push(
+      `已紀錄 **${streakStats.recorded}/${streakStats.total}** 個帳號` +
+        (streakStats.recorded > 0
+          ? ` · 最高 **${fmtNum(streakStats.max)}** 天 · 最低 **${fmtNum(streakStats.min)}** 天 · 平均 **${fmtNum(streakStats.avg)}** 天 · 合計 **${fmtNum(streakStats.sum)}** 天`
+          : " · 尚無有效天數") +
+        (streakStats.missing > 0 ? ` · ${streakStats.missing} 個帳號未擷取到` : ""),
+      ""
+    );
+    lines.push("| # | 帳號 | 連續簽到天數 | 狀態 |");
+    lines.push("| ---: | --- | ---: | --- |");
+    for (const row of [...ranRows].sort(
+      (a, b) =>
+        (Number.isFinite(b.streakDays) ? b.streakDays : -1)
+        - (Number.isFinite(a.streakDays) ? a.streakDays : -1)
+        || (a.account ?? 0) - (b.account ?? 0)
+    )) {
+      lines.push(
+        `| ${row.account ?? "—"} | ${escapeCell(shortLabel(row))} | ${fmtNum(row.streakDays)} | ${statusBadge(row.status)} |`
+      );
+    }
+    lines.push("");
+
   }
 
   if (noSecretRows.length > 0 || notSelectedRows.length > 0 || otherSkipped.length > 0) {
@@ -288,10 +361,18 @@ function printConsoleTable(rows, counts) {
   console.log(
     `已執行: ${counts.configured} | 今日新簽: ${counts.checked_in} | 先前已簽: ${counts.already_done} | 略過: ${counts.skipped} | 失敗: ${counts.failed}`
   );
+  if (counts.configured > 0) {
+    console.log(
+      `連續簽到: 已紀錄 ${counts.streak_recorded}/${counts.configured}` +
+        (counts.streak_recorded > 0
+          ? ` | 最高 ${fmtNum(counts.streak_max)} | 最低 ${fmtNum(counts.streak_min)} | 平均 ${fmtNum(counts.streak_avg)} | 合計 ${fmtNum(counts.streak_sum)}`
+          : "")
+    );
+  }
   for (const row of rows) {
     if (row.status === "skipped") continue;
     console.log(
-      `- #${row.account ?? "?"} ${shortLabel(row)}: ${statusBadge(row.status)} | 連續 ${fmtNum(row.streakDays)} | 成長 ${fmtNum(row.growthPoints)} | ${row.message}`
+      `- #${row.account ?? "?"} ${shortLabel(row)}: ${statusBadge(row.status)} | 連續簽到 ${fmtNum(row.streakDays)} 天 | 成長 ${fmtNum(row.growthPoints)} | ${row.message}`
     );
   }
   if (counts.skipped_no_secret > 0) {
@@ -342,16 +423,49 @@ function main() {
   fs.mkdirSync(outDir, { recursive: true });
   const mdPath = path.join(outDir, "signin-daily-summary.md");
   const jsonPath = path.join(outDir, "signin-daily-summary.json");
+  const streakPath = path.join(outDir, "signin-streaks.json");
+  const generatedAt = new Date().toISOString();
+  const streakStats = buildStreakStats(rows);
+  const streaks = rows
+    .filter((row) => row.status !== "skipped")
+    .map((row) => ({
+      account: row.account,
+      label: shortLabel(row),
+      name: row.name,
+      status: row.status,
+      streakDays: row.streakDays ?? null,
+      growthPoints: row.growthPoints ?? null,
+      musicPoints: row.musicPoints ?? null,
+      finishedAt: row.finishedAt || null
+    }));
+
   fs.writeFileSync(mdPath, markdown, "utf8");
   fs.writeFileSync(
     jsonPath,
     `${JSON.stringify(
       {
-        generatedAt: new Date().toISOString(),
+        generatedAt,
         runUrl,
         expectedCount: Number.isFinite(expectedCount) ? expectedCount : null,
         counts,
-        rows
+        streakStats,
+        rows,
+        streaks
+      },
+      null,
+      2
+    )}\n`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    streakPath,
+    `${JSON.stringify(
+      {
+        generatedAt,
+        runUrl,
+        expectedCount: Number.isFinite(expectedCount) ? expectedCount : null,
+        ...streakStats,
+        accounts: streaks
       },
       null,
       2
@@ -361,6 +475,13 @@ function main() {
 
   console.log(`已寫入 ${mdPath}`);
   console.log(`已寫入 ${jsonPath}`);
+  console.log(
+    `已寫入 ${streakPath}（${streakStats.recorded}/${streakStats.total} 個帳號已紀錄連續簽到天數` +
+      (streakStats.recorded > 0
+        ? `；最高 ${streakStats.max} / 最低 ${streakStats.min} / 平均 ${streakStats.avg}`
+        : "") +
+      "）"
+  );
 
   if (process.env.GITHUB_STEP_SUMMARY) {
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown, "utf8");

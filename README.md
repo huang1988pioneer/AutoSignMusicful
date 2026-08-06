@@ -151,14 +151,19 @@ Job Summary 裡的帳號標籤來自 workflow 環境變數 `MUSICFUL_ACCOUNT_LAB
 
 #### 執行行為
 
-- **單一 job、依序簽到**：不是 matrix 平行跑。一個 job 從帳號 1 掃到 33，有設定 secret 的才真正開瀏覽器。
-- **帳號間隔**：預設每兩個帳號之間隨機等待約 **5–15 秒**（可用 repository variables 調整，見下方）。
+- **單一 job、依序同時簽到**：不是 matrix 拆 job。一個 job 內最多 **33** 個帳號，有設定 secret 的才真正開瀏覽器。
+- **啟動節奏（累積延遲、並行執行）**：
+  1. 帳號 1 立刻開始
+  2. 帳號 2 比帳號 1 隨機晚 **5–15 秒** 開始
+  3. 帳號 3 比帳號 2 再隨機晚 **5–15 秒** 開始
+  4. 依此類推到帳號 33  
+  後續帳號**不必等前一個簽到完成**，各自在自己的 browser context 並行跑（間隔可用 repository variables 調整，見下方）。
 - **未設定 secret 的槽位**：結果標成略過（`skipped`），不會讓 job 失敗。
 - **有任一已設定帳號失敗**：整個 job 失敗；Summary 會列出需關注帳號。
 
 #### 排程
 
-workflow 每天在三個時段執行所有已設定帳號：
+workflow 每天在三個時段各執行一次，涵蓋所有已設定帳號：
 
 ```text
 台灣時間 05:00–06:00
@@ -166,9 +171,9 @@ workflow 每天在三個時段執行所有已設定帳號：
 台灣時間 21:00–22:00
 ```
 
-workflow 在每個時段的整點觸發，接著隨機等待 0–59 分鐘才開始；同一次執行中，後續帳號仍會在前一帳號完成後隨機等待 5–15 秒。GitHub 排程本身可能延遲，因此實際開始時間可能略晚。
+每個時段在整點由 cron 觸發，接著隨機等待 **0–59 分鐘** 才開始簽到（讓實際開始落在該小時內）；同一次 run 中 33 個帳號再依上列 5–15 秒累積延遲依序啟動並同時執行。GitHub 排程本身可能延遲，因此實際開始時間可能略晚於整點。
 
-（cron 為 UTC `0 21 * * *`、`0 5 * * *` 與 `0 13 * * *`。）
+（cron 為 UTC `0 21 * * *`、`0 5 * * *` 與 `0 13 * * *`，對應台灣時間 05:00 / 13:00 / 21:00。）
 
 #### 手動執行 / 只跑單一帳號
 
@@ -209,16 +214,19 @@ workflow 在每個時段的整點觸發，接著隨機等待 0–59 分鐘才開
 
 ### 每日匯總（Job Summary）
 
-Workflow 與 [AutoSignLitVideo](https://github.com/huang1988pioneer/AutoSignLitVideo/actions/runs/29248744621) 相同模式：**單一 job** 依序跑完所有帳號後，直接寫入 GitHub **Job Summary**，並上傳報告 artifact。
+Workflow 與 [AutoSignLitVideo](https://github.com/huang1988pioneer/AutoSignLitVideo/actions/runs/29248744621) 相同模式：**單一 job** 以交錯延遲並行跑完所有帳號後，直接寫入 GitHub **Job Summary**，並上傳報告 artifact。
 
 跑完後在 Actions run 頁面可看到：
 
-1. **Summary** 區塊（中文標題 + 統計表 + 各帳號狀態 / 成長點 / 音樂點 / 連續）  
+1. **Summary** 區塊（中文標題 + 統計表 + 各帳號狀態 / 成長點 / 音樂點 / **連續簽到天數** + 最高／最低／平均彙總）  
 2. Artifact：`musicful-signin-report`（保留 30 天）  
    - `signin-daily-summary.md` / `.json`  
-   - 各帳號 `signin-result-N.json`  
+   - `signin-streaks.json`（各帳號連續簽到天數 + 彙總統計）  
+   - 各帳號 `signin-result-N.json`（含 `streakDays` 欄位）  
 3. 未設定 secret 的槽位會標成略過（例如 `#21–33`）  
 4. 有帳號失敗時 job 會失敗，Summary 會列出需關注帳號  
+
+每次簽到成功或已簽過時，腳本會從成長中心頁面擷取「累計：N 天」寫入結果；Job Summary 與 `signin-streaks.json` 都會列出每個帳號的連續簽到天數，並計算已紀錄帳號數、最高／最低／平均／合計天數。  
 
 狀態說明：
 

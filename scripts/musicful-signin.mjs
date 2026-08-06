@@ -63,7 +63,10 @@ function log(message) {
 }
 
 function extractMetrics(text = "") {
-  const streakDays = text.match(/累計\s*[:：]\s*(\d+)\s*天/i)?.[1]
+  // Continuous sign-in days (Musicful shows "累計：N 天" / simplified "累计" / "連續簽到").
+  const streakDays = text.match(/累[計计]\s*[:：]?\s*(\d+)\s*天/i)?.[1]
+    || text.match(/[連连][續续][簽签]到\s*[:：]?\s*(\d+)\s*天?/i)?.[1]
+    || text.match(/[連连][續续]\s*[:：]?\s*(\d+)\s*天/i)?.[1]
     || text.match(/streak\s*[:：]?\s*(\d+)\s*(?:day|days)?/i)?.[1]
     || null;
   const growthPoints = text.match(/已獲得成長積分\s*(\d+)/i)?.[1]
@@ -120,7 +123,11 @@ function writeSignInResult(result) {
   if (target !== canonical) {
     fs.writeFileSync(canonical, body, "utf8");
   }
-  log(`Wrote sign-in result: ${canonical} (${payload.status})`);
+  const streakLabel = payload.streakDays != null ? `${payload.streakDays} 天` : "—";
+  log(
+    `Wrote sign-in result: ${path.basename(target)} (${payload.status}); ` +
+    `account=${payload.account ?? "—"} streakDays=${streakLabel}`
+  );
   return payload;
 }
 
@@ -140,24 +147,19 @@ async function visibleCount(locator) {
 }
 
 function logVisibleStatus(accountName, stage, text) {
-  const streak = text.match(/累計\s*[:：]\s*(\d+)\s*天/i)?.[1];
-  const growthPoints = text.match(/已獲得成長積分\s*(\d+)/i)?.[1]
-    || text.match(/積分\s*[:：]\s*(\d+)/i)?.[1];
-  const musicPoints = text.match(/(\d+)\s*\/\s*\d+\s*音樂點/i)?.[1];
-
-  log(`[${accountName}] ${stage} status: 累計=${streak || "not found"} 天, 積分=${growthPoints || "not found"}, 音樂點=${musicPoints || "not found"}.`);
+  const metrics = extractMetrics(text);
+  log(
+    `[${accountName}] ${stage} status: 連續簽到=${metrics.streakDays ?? "not found"} 天, ` +
+    `積分=${metrics.growthPoints ?? "not found"}, 音樂點=${metrics.musicPoints ?? "not found"}.`
+  );
 }
 
 function logReadableStatus(accountName, stage, text) {
-  const streak = text.match(/累計\s*[:：]\s*(\d+)\s*天/i)?.[1]
-    || text.match(/streak\s*[:：]?\s*(\d+)\s*(?:day|days)?/i)?.[1];
-  const growthPoints = text.match(/已獲得成長積分\s*(\d+)/i)?.[1]
-    || text.match(/積分\s*[:：]\s*(\d+)/i)?.[1]
-    || text.match(/growth\s*points?\s*(\d+)/i)?.[1];
-  const musicPoints = text.match(/(\d+)\s*\/\s*\d+\s*音樂點/i)?.[1]
-    || text.match(/(\d+)\s*\/\s*\d+\s*music\s*points?/i)?.[1];
-
-  log(`[${accountName}] ${stage} status: streakDays=${streak || "not found"}, growthPoints=${growthPoints || "not found"}, musicPoints=${musicPoints || "not found"}.`);
+  const metrics = extractMetrics(text);
+  log(
+    `[${accountName}] ${stage} status: streakDays=${metrics.streakDays ?? "not found"}, ` +
+    `growthPoints=${metrics.growthPoints ?? "not found"}, musicPoints=${metrics.musicPoints ?? "not found"}.`
+  );
 }
 
 async function logPageDiagnostics(page, accountName, stage) {

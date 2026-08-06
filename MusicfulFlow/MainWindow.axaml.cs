@@ -152,10 +152,11 @@ public partial class MainWindow : Window
             if (run is null) { RunMetric.Text = "尚無執行紀錄"; MonthlyStreakMetric.Text = "—"; RunTimeMetric.Text = "—"; DashboardStatus.Text = "尚未找到 Musicful Auto Sign 執行紀錄。"; return; }
             RunMetric.Text = string.IsNullOrWhiteSpace(run.Conclusion) ? run.Status : run.Conclusion;
             RunTimeMetric.Text = TimeZoneInfo.ConvertTime(run.UpdatedAt, GetTaipeiZone()).ToString("MM/dd HH:mm");
-            var accounts = await _github.GetAccountMonthlyStatusesAsync(repository, run.DatabaseId);
+            var accounts = await _github.GetAccountStreakStatusesAsync(repository, run.DatabaseId);
             var configured = accounts.Count(account => account.IsConfigured);
-            MonthlyStreakMetric.Text = $"{configured} 已設定 · {accounts.Length - configured} 未設定";
-            RenderMonthlyAccounts(accounts);
+            var withStreak = accounts.Count(account => account.StreakDays is not null);
+            MonthlyStreakMetric.Text = $"{withStreak} 有天數 · {configured} 已執行";
+            RenderStreakAccounts(accounts);
             DashboardStatus.Text = $"最近執行：{run.Url}";
         });
     }
@@ -168,20 +169,24 @@ public partial class MainWindow : Window
         finally { TriggerButton.IsEnabled = RefreshButton.IsEnabled = true; }
     }
 
-    private void RenderMonthlyAccounts(IEnumerable<AccountMonthlyStatus> accounts)
+    private void RenderStreakAccounts(IEnumerable<AccountStreakStatus> accounts)
     {
         MonthlyAccountsPanel.Children.Clear();
         foreach (var account in accounts)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("68,*,100") };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("68,*,120") };
             row.Children.Add(new TextBlock { Text = $"#{account.Number:00}", FontWeight = Avalonia.Media.FontWeight.SemiBold });
             var alias = new TextBlock { Text = account.Alias, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
             Grid.SetColumn(alias, 1);
             row.Children.Add(alias);
             var state = new TextBlock
             {
-                Text = account.IsConfigured ? $"本月 {account.Days ?? 0} 天" : "未設定",
-                Foreground = account.IsConfigured ? Avalonia.Media.Brushes.SeaGreen : Avalonia.Media.Brushes.Gray,
+                Text = account.IsConfigured
+                    ? (account.StreakDays is null ? "連續 — 天" : $"連續 {account.StreakDays} 天")
+                    : "未設定",
+                Foreground = account.IsConfigured
+                    ? (account.StreakDays is null ? Avalonia.Media.Brushes.DarkOrange : Avalonia.Media.Brushes.SeaGreen)
+                    : Avalonia.Media.Brushes.Gray,
                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
             };
             Grid.SetColumn(state, 2);

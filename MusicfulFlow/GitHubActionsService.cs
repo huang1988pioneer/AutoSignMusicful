@@ -22,23 +22,56 @@ internal sealed class GitHubActionsService
         return JsonSerializer.Deserialize<List<RunInfo>>(output, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.FirstOrDefault();
     }
 
-    public async Task<AccountMonthlyStatus[]> GetAccountMonthlyStatusesAsync(string repository, long runId)
+    public async Task<AccountStreakStatus[]> GetAccountStreakStatusesAsync(string repository, long runId)
     {
         var output = await RunGhAsync(["run", "view", runId.ToString(), "--repo", repository, "--log"]);
-        var matches = Regex.Matches(
-                output,
-                @"-\s*#(?<number>\d+)\s+(?<alias>[^:\r\n]+):\s*✅.*?\|\s*連續\s+(?<days>\d+)\s*\|",
-                RegexOptions.Multiline)
-            .Select(match => new AccountMonthlyStatus(
-                int.Parse(match.Groups["number"].Value),
+        var byNumber = new Dictionary<int, AccountStreakStatus>();
+
+        // Console summary lines, e.g.
+        // - #1 goldshoot0720: ✅ 今日簽到 | 連續簽到 12 天 | 成長 100 | ...
+        // Also accepts older "連續 12" form without "簽到/天".
+        foreach (Match match in Regex.Matches(
+                     output,
+                     @"-\s*#(?<number>\d+)\s+(?<alias>[^:\r\n]+):\s*(?<badge>[✅☑️❌⏭️❔][^\|]*?)\|\s*連續(?:簽到)?\s+(?<days>\d+|—|-)\s*(?:天\s*)?\|",
+                     RegexOptions.Multiline))
+        {
+            if (!int.TryParse(match.Groups["number"].Value, out var number)) continue;
+            var daysText = match.Groups["days"].Value.Trim();
+            int? days = int.TryParse(daysText, out var parsed) ? parsed : null;
+            var badge = match.Groups["badge"].Value;
+            var ran = badge.Contains("✅", StringComparison.Ordinal)
+                || badge.Contains("☑️", StringComparison.Ordinal)
+                || badge.Contains("❌", StringComparison.Ordinal);
+            byNumber[number] = new AccountStreakStatus(
+                number,
                 match.Groups["alias"].Value.Trim(),
-                int.Parse(match.Groups["days"].Value),
-                true))
-            .ToDictionary(status => status.Number);
+                days,
+                ran || days is not null);
+        }
+
+        // Markdown table rows as a fallback:
+        // | 1 | label | ✅ 今日簽到 | +10 | 20 | 12 | 本次新簽 |
+        foreach (Match match in Regex.Matches(
+                     output,
+                     @"\|\s*(?<number>\d+)\s*\|\s*(?<alias>[^|\r\n]+?)\s*\|\s*(?<status>[^|\r\n]+?)\s*\|\s*[^|\r\n]*\|\s*[^|\r\n]*\|\s*(?<days>\d+|—|-)\s*\|",
+                     RegexOptions.Multiline))
+        {
+            if (!int.TryParse(match.Groups["number"].Value, out var number)) continue;
+            if (byNumber.ContainsKey(number)) continue;
+            var status = match.Groups["status"].Value;
+            if (status.Contains("略過", StringComparison.Ordinal) || status.Contains("⏭️", StringComparison.Ordinal)) continue;
+            var daysText = match.Groups["days"].Value.Trim();
+            int? days = int.TryParse(daysText, out var parsed) ? parsed : null;
+            byNumber[number] = new AccountStreakStatus(
+                number,
+                match.Groups["alias"].Value.Trim(),
+                days,
+                true);
+        }
 
         return Enumerable.Range(1, 33)
-            .Select(number => matches.GetValueOrDefault(number)
-                ?? new AccountMonthlyStatus(number, $"account_{number}", null, false))
+            .Select(number => byNumber.GetValueOrDefault(number)
+                ?? new AccountStreakStatus(number, $"account_{number}", null, false))
             .ToArray();
     }
 
@@ -72,4 +105,4 @@ internal sealed class GitHubActionsService
 }
 
 internal sealed record RunInfo(long DatabaseId, string Status, string? Conclusion, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string Url);
-internal sealed record AccountMonthlyStatus(int Number, string Alias, int? Days, bool IsConfigured);
+internal sealed record AccountStreakStatus(int Number, string Alias, int? StreakDays, bool IsConfigured);

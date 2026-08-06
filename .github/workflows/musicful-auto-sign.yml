@@ -8,7 +8,9 @@ on:
         required: false
         default: "all"
   schedule:
-    # Taiwan time: 05:00, 13:00, and 21:00. The job randomizes its start by up to 59 minutes.
+    # Taiwan time windows: 05:00–06:00, 13:00–14:00, 21:00–22:00.
+    # Cron fires on the hour; the job then sleeps a random 0–59 minutes so start lands in that hour.
+    # All configured accounts (up to 33) then start with staggered 5–15s offsets and run concurrently.
     - cron: "0 21 * * *"
     - cron: "0 5 * * *"
     - cron: "0 13 * * *"
@@ -103,6 +105,7 @@ jobs:
           path: |
             artifacts/signin-daily-summary.md
             artifacts/signin-daily-summary.json
+            artifacts/signin-streaks.json
             artifacts/signin-result-*.json
           if-no-files-found: warn
           retention-days: 30
