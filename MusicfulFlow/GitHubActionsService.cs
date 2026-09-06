@@ -8,6 +8,15 @@ namespace MusicfulFlow;
 internal sealed class GitHubActionsService
 {
     private const string Workflow = "musicful-auto-sign.yml";
+    private readonly string _workspace;
+
+    public GitHubActionsService(string workspace) => _workspace = workspace;
+
+    public async Task UpdateSecretAsync(string repository, string secretName, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) throw new InvalidOperationException("登入狀態是空的，請重新登入並匯出。");
+        await RunGhAsync(["secret", "set", secretName, "--repo", repository, "--app", "actions"], value);
+    }
 
     public async Task TriggerAsync(string repository, int? account)
     {
@@ -77,14 +86,16 @@ internal sealed class GitHubActionsService
 
     public async Task<string> GetRepositoryAsync() => (await RunGhAsync(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])).Trim();
 
-    private static async Task<string> RunGhAsync(IEnumerable<string> arguments)
+    private async Task<string> RunGhAsync(IEnumerable<string> arguments, string? input = null)
     {
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = "gh",
+                WorkingDirectory = _workspace,
                 UseShellExecute = false,
+                RedirectStandardInput = input is not null,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 StandardOutputEncoding = Encoding.UTF8,
@@ -96,10 +107,16 @@ internal sealed class GitHubActionsService
         if (!process.Start()) throw new InvalidOperationException("無法啟動 GitHub CLI (gh)。請先安裝並執行 gh auth login。");
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
+        if (input is not null)
+        {
+            try { await process.StandardInput.WriteAsync(input); }
+            finally { process.StandardInput.Close(); }
+        }
         await process.WaitForExitAsync();
         var output = await stdout;
         var error = await stderr;
         if (process.ExitCode == 0) return output;
+        if (input is not null) throw new InvalidOperationException("GitHub Secret 更新失敗。請確認 gh auth login 已登入，且具有此儲存庫的 Secrets 寫入權限，再重試。");
         throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? output.Trim() : error.Trim());
     }
 }

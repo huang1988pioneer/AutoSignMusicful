@@ -10,12 +10,13 @@ public partial class MainWindow : Window
 {
     private const int AccountCount = 33;
     private readonly string _workspace = FindWorkspace();
-    private readonly GitHubActionsService _github = new();
+    private readonly GitHubActionsService _github;
     private readonly Dictionary<int, TextBox> _aliasInputs = [];
     private readonly Dictionary<int, string> _aliases = LoadAliases();
 
     public MainWindow()
     {
+        _github = new GitHubActionsService(_workspace);
         InitializeComponent();
         AccountComboBox.ItemsSource = Enumerable.Range(1, AccountCount).Select(i => $"帳號 {i:00}").ToArray();
         BrowserComboBox.ItemsSource = new[]
@@ -61,12 +62,15 @@ public partial class MainWindow : Window
         var label = _aliases.GetValueOrDefault(AccountNumber);
         SecretNameText.Text = string.IsNullOrWhiteSpace(label) ? SecretName : $"{SecretName}  ·  {label}";
         CopyStateButton.IsEnabled = File.Exists(StateFile);
+        UpdateSecretButton.IsEnabled = StartLoginButton.IsEnabled && File.Exists(StateFile);
     }
 
     private async void StartLoginButton_OnClick(object? sender, RoutedEventArgs e)
     {
         StartLoginButton.IsEnabled = false;
         CopyStateButton.IsEnabled = false;
+        UpdateSecretButton.IsEnabled = false;
+        AccountComboBox.IsEnabled = BrowserComboBox.IsEnabled = false;
         try
         {
             LoginStatus.Text = BrowserName switch
@@ -98,7 +102,36 @@ public partial class MainWindow : Window
             CopyStateButton.IsEnabled = true;
         }
         catch (Exception ex) { LoginStatus.Text = $"登入狀態更新失敗：{ex.Message}"; }
-        finally { StartLoginButton.IsEnabled = true; }
+        finally
+        {
+            StartLoginButton.IsEnabled = true;
+            AccountComboBox.IsEnabled = BrowserComboBox.IsEnabled = true;
+            UpdateAccountDisplay();
+        }
+    }
+
+    private async void UpdateSecretButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var stateFile = StateFile;
+        var secretName = SecretName;
+        UpdateSecretButton.IsEnabled = StartLoginButton.IsEnabled = false;
+        AccountComboBox.IsEnabled = false;
+        try
+        {
+            if (!File.Exists(stateFile)) throw new InvalidOperationException("目前帳號尚未匯出登入狀態，請先開始登入並匯出。");
+            var value = (await File.ReadAllTextAsync(stateFile)).Trim();
+            if (string.IsNullOrWhiteSpace(value)) throw new InvalidOperationException("登入狀態是空的，請重新登入並匯出。");
+            LoginStatus.Text = $"正在更新 GitHub Secret {secretName}…";
+            var repository = await _github.GetRepositoryAsync();
+            await _github.UpdateSecretAsync(repository, secretName, value);
+            LoginStatus.Text = $"已更新 {repository} 的 {secretName}。";
+        }
+        catch (Exception ex) { LoginStatus.Text = $"更新失敗：{ex.Message}"; }
+        finally
+        {
+            StartLoginButton.IsEnabled = AccountComboBox.IsEnabled = true;
+            UpdateAccountDisplay();
+        }
     }
 
     private async void CopyStateButton_OnClick(object? sender, RoutedEventArgs e)

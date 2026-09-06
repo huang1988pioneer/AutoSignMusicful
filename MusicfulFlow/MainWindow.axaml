@@ -64,12 +64,12 @@
             <TextBlock Classes="muted" Text="預設使用 Chrome／Chromium；若無法登入可改選 Edge 或 Firefox 備案。請用同一瀏覽器完成匯出與後續驗證。" TextWrapping="Wrap" FontSize="12"/>
             <Border Background="#E8F1FB" CornerRadius="7" Padding="12,8"><TextBlock x:Name="SecretNameText" FontFamily="Consolas" Foreground="#125799"/></Border>
             <Button x:Name="StartLoginButton" Classes="primary" HorizontalAlignment="Left" Click="StartLoginButton_OnClick">開始登入並匯出</Button>
-            <StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="CopyStateButton" IsEnabled="False" Click="CopyStateButton_OnClick">複製 Base64</Button><Button x:Name="CopySecretButton" Click="CopySecretButton_OnClick">複製 Secret 名稱</Button></StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="CopyStateButton" IsEnabled="False" Click="CopyStateButton_OnClick">複製 Base64</Button><Button x:Name="UpdateSecretButton" IsEnabled="False" Click="UpdateSecretButton_OnClick">更新 GitHub Secret</Button><Button x:Name="CopySecretButton" Click="CopySecretButton_OnClick">複製 Secret 名稱</Button></StackPanel>
             <Border Height="1" Background="#DCE5EF" Margin="0,4"/>
             <TextBlock Text="目前帳號積分" FontSize="16" FontWeight="SemiBold"/>
             <Button x:Name="ReadPointsButton" HorizontalAlignment="Left" Click="ReadPointsButton_OnClick">讀取目前帳號積分</Button>
             <TextBlock x:Name="PointsStatus" Classes="muted" Text="需要先匯出此帳號的登入狀態。" TextWrapping="Wrap"/>
-            <TextBlock x:Name="LoginStatus" Classes="muted" Text="匯出後，將 Base64 貼到對應的 GitHub Actions Secret。" TextWrapping="Wrap"/>
+            <TextBlock x:Name="LoginStatus" Classes="muted" Text="匯出後，點選「更新 GitHub Secret」上傳目前帳號的登入 token；請先使用 gh auth login 登入。" TextWrapping="Wrap"/>
           </StackPanel></Border>
         </StackPanel>
       </StackPanel>
