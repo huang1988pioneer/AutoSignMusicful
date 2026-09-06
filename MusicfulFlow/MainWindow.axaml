@@ -55,7 +55,7 @@
         </StackPanel>
         <StackPanel x:Name="LoginView" IsVisible="False" Spacing="18">
           <TextBlock Text="更新登入狀態" FontSize="30" FontWeight="SemiBold" Foreground="#132A42"/>
-          <TextBlock Classes="muted" Text="登入後，頁面穩定 5 秒且登入視窗關閉後，會自動切換到 Musicful「成長中心」並匯出登入狀態。若未自動切換，可手動前往。請勿關閉瀏覽器，匯出完成後再點選「更新 GitHub Secret」。" TextWrapping="Wrap"/>
+          <TextBlock Classes="muted" Text="登入前後，頁面穩定 5 秒後都會自動切換到 Musicful「成長中心」；登入完成後自動匯出登入狀態。若未自動切換，可手動前往。請勿關閉瀏覽器，匯出完成後再點選「更新 GitHub Secret」。" TextWrapping="Wrap"/>
           <Border Classes="panel"><StackPanel Spacing="14">
             <TextBlock Text="選擇帳號" FontSize="19" FontWeight="SemiBold"/>
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
