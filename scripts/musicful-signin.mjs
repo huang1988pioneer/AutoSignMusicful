@@ -55,8 +55,10 @@ const refreshSecrets = process.env.MUSICFUL_REFRESH_SECRETS === "1" || args.has(
 const secretWriteToken = process.env.MUSICFUL_SECRET_WRITE_TOKEN || "";
 const secretRepo = process.env.MUSICFUL_SECRET_REPO || process.env.GITHUB_REPOSITORY || "";
 const rawMaxSecretBytes = Number.parseInt(process.env.MUSICFUL_MAX_SECRET_BYTES || "48000", 10);
-// GitHub caps an Actions secret at 48 KB; skip oversized states instead of failing the write.
+// GitHub rejects an Actions secret larger than 64 KB (65,536 bytes) outright; stay well under
+// it by default and skip oversized states instead of failing the write.
 const maxSecretBytes = Number.isFinite(rawMaxSecretBytes) && rawMaxSecretBytes > 0 ? rawMaxSecretBytes : 48_000;
+const githubSecretLimitBytes = 65_536;
 
 fs.mkdirSync(profileDir, { recursive: true });
 fs.mkdirSync(logDir, { recursive: true });
@@ -297,12 +299,56 @@ function createStdinEnterWaiter(promptLine) {
 }
 
 async function waitForLoggedInGrowthCenter(page, accountName) {
-  log(`[${accountName}] Export mode is open. Log in and open the Growth Center within ${exportTimeoutMinutes} minute(s).`);
-  log(`[${accountName}] This wait does not click, press Escape, dismiss dialogs, or re-navigate — to avoid flicker/reload.`);
+  log(`[${accountName}] Export mode is open. Log in within ${exportTimeoutMinutes} minute(s). A stable Musicful page without a login dialog will switch to Growth Center after 5 seconds.`);
+
+  let navigationCandidate = "";
+  let navigationReadyAt = 0;
+  let navigationBusy = false;
+  let navigationAttempted = false;
+  let navigationStopped = false;
+  const growthNavigationTimer = setInterval(async () => {
+    if (navigationBusy || navigationAttempted || navigationStopped) return;
+    navigationBusy = true;
+    try {
+      const currentUrl = page.url();
+      const url = new URL(currentUrl);
+      const onMusicful = url.hostname === "musicful.ai" || url.hostname.endsWith(".musicful.ai");
+      const loginVisible = onMusicful && await page.evaluate(() =>
+        [...document.querySelectorAll("input[type='email'], input[type='password'], input[placeholder*='信箱'], .third-login-text")]
+          .some(el => {
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0
+              && rect.width > 0 && rect.height > 0;
+          })
+      );
+      if (!onMusicful || /growth-center|login|signin|sign-in|oauth|callback|auth/i.test(url.pathname) || loginVisible) {
+        navigationCandidate = "";
+        return;
+      }
+      if (navigationCandidate !== currentUrl) {
+        navigationCandidate = currentUrl;
+        navigationReadyAt = Date.now() + 5_000;
+        return;
+      }
+      if (Date.now() < navigationReadyAt || navigationStopped || page.url() !== currentUrl) return;
+      navigationAttempted = true;
+      log(`[${accountName}] Opening Growth Center after the 5-second wait.`);
+      await page.goto(signInUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    } catch (error) {
+      navigationCandidate = "";
+      if (navigationAttempted && !navigationStopped) {
+        log(`[${accountName}] Automatic navigation failed; open Growth Center manually: ${error.message}`);
+      }
+    } finally {
+      navigationBusy = false;
+    }
+  }, 250);
 
   let navCount = 0;
   const onNavigated = (frame) => {
     if (frame !== page.mainFrame()) return;
+    navigationCandidate = "";
     navCount += 1;
     if (navCount <= 15 || navCount % 10 === 0) {
       log(`[${accountName}] Main-frame navigation #${navCount}: ${page.url()}`);
@@ -373,6 +419,8 @@ async function waitForLoggedInGrowthCenter(page, accountName) {
     );
   } finally {
     waitSettled = true;
+    navigationStopped = true;
+    clearInterval(growthNavigationTimer);
     enterWaiter.cancel();
     page.off("framenavigated", onNavigated);
   }
@@ -836,6 +884,45 @@ function selectScheduledStorageState(storageStates) {
 }
 
 /**
+ * localStorage keys that are analytics or app cache, never sign-in state (auth lives in
+ * cookies). Musicful's song cache alone can add ~18 KB, which pushes the encoded state past
+ * GitHub's 64 KB secret limit and makes `gh secret set` fail.
+ */
+const disposableLocalStoragePatterns = [
+  /^ai-music-generator:songs:/,
+  /^__mpq_/,
+  /^mp_[0-9a-f]+_mixpanel$/,
+  /^_uetsid/,
+  /^_uetvid/,
+  /^_gcl_/,
+  /^lastExternalReferrer/
+];
+
+function isDisposableLocalStorageKey(name) {
+  return disposableLocalStoragePatterns.some((pattern) => pattern.test(name));
+}
+
+/** Drop analytics/cache localStorage entries; cookies and everything else are kept as-is. */
+function pruneStorageState(state) {
+  if (!state?.origins?.length) return state;
+  return {
+    ...state,
+    origins: state.origins.map((origin) => {
+      if (!Array.isArray(origin.localStorage)) return origin;
+      return {
+        ...origin,
+        localStorage: origin.localStorage.filter((item) => !isDisposableLocalStorageKey(item.name))
+      };
+    })
+  };
+}
+
+/** Prune, then base64 — the single place a storage state becomes a secret value. */
+function encodeStorageState(state) {
+  return Buffer.from(JSON.stringify(pruneStorageState(state)), "utf8").toString("base64");
+}
+
+/**
  * Base64 of the context's current cookies/localStorage/indexedDB, or null when the
  * export failed or came back without cookies (never overwrite a good secret with that).
  */
@@ -846,7 +933,7 @@ async function captureStorageState(context, accountName) {
       log(`[${accountName}] Skipping secret refresh: exported state has no cookies.`);
       return null;
     }
-    return Buffer.from(JSON.stringify(state), "utf8").toString("base64");
+    return encodeStorageState(state);
   } catch (error) {
     log(`[${accountName}] Could not export storage state for refresh: ${error.message}`);
     return null;
@@ -972,12 +1059,19 @@ async function signInWithContext(context, accountName) {
   if (exportStateMode) {
     await waitForLoggedInGrowthCenter(page, accountName);
     const state = await context.storageState({ indexedDB: true });
-    const encoded = Buffer.from(JSON.stringify(state), "utf8").toString("base64");
+    const encoded = encodeStorageState(state);
+    const encodedBytes = Buffer.byteLength(encoded, "utf8");
+    if (encodedBytes > githubSecretLimitBytes) {
+      throw new Error(
+        `Exported storage state is ${encodedBytes} bytes, over GitHub's ${githubSecretLimitBytes}-byte secret limit. `
+        + "Clear this browser profile's site data for musicful.ai, log in again, and export before generating songs."
+      );
+    }
     fs.writeFileSync(stateFile, `${encoded}\n`, { mode: 0o600 });
     if (numberedStateFile !== stateFile) {
       fs.writeFileSync(numberedStateFile, `${encoded}\n`, { mode: 0o600 });
     }
-    log(`Storage state exported: ${stateFile}`);
+    log(`Storage state exported: ${stateFile} (${encodedBytes} bytes, limit ${githubSecretLimitBytes}).`);
     if (numberedStateFile !== stateFile) {
       log(`Numbered storage state exported: ${numberedStateFile}`);
     }

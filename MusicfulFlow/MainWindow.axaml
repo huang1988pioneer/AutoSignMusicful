@@ -55,10 +55,13 @@
         </StackPanel>
         <StackPanel x:Name="LoginView" IsVisible="False" Spacing="18">
           <TextBlock Text="更新登入狀態" FontSize="30" FontWeight="SemiBold" Foreground="#132A42"/>
-          <TextBlock Classes="muted" Text="登入完成後，必須手動前往 Musicful「成長中心」並停留在該頁，工具才能偵測並自動匯出登入狀態。請勿關閉瀏覽器，匯出完成後再點選「更新 GitHub Secret」。" TextWrapping="Wrap"/>
+          <TextBlock Classes="muted" Text="登入後，頁面穩定 5 秒且登入視窗關閉後，會自動切換到 Musicful「成長中心」並匯出登入狀態。若未自動切換，可手動前往。請勿關閉瀏覽器，匯出完成後再點選「更新 GitHub Secret」。" TextWrapping="Wrap"/>
           <Border Classes="panel"><StackPanel Spacing="14">
             <TextBlock Text="選擇帳號" FontSize="19" FontWeight="SemiBold"/>
-            <ComboBox x:Name="AccountComboBox" Width="210" SelectedIndex="0" SelectionChanged="AccountComboBox_OnSelectionChanged"/>
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+              <ComboBox x:Name="AccountComboBox" Width="210" SelectedIndex="0" SelectionChanged="AccountComboBox_OnSelectionChanged"/>
+              <TextBlock x:Name="AccountAliasText" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="#125799" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
             <TextBlock Text="瀏覽器" FontSize="14" FontWeight="SemiBold" Margin="0,4,0,0"/>
             <ComboBox x:Name="BrowserComboBox" Width="320" SelectedIndex="0"/>
             <TextBlock Classes="muted" Text="預設使用 Chrome／Chromium；若無法登入可改選 Edge 或 Firefox 備案。請用同一瀏覽器完成匯出與後續驗證。" TextWrapping="Wrap" FontSize="12"/>

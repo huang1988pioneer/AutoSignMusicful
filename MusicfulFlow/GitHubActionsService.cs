@@ -8,6 +8,8 @@ namespace MusicfulFlow;
 internal sealed class GitHubActionsService
 {
     private const string Workflow = "musicful-auto-sign.yml";
+    // GitHub rejects an Actions secret larger than 64 KB outright.
+    private const int GitHubSecretLimitBytes = 65_536;
     private readonly string _workspace;
 
     public GitHubActionsService(string workspace) => _workspace = workspace;
@@ -15,6 +17,10 @@ internal sealed class GitHubActionsService
     public async Task UpdateSecretAsync(string repository, string secretName, string value)
     {
         if (string.IsNullOrWhiteSpace(value)) throw new InvalidOperationException("登入狀態是空的，請重新登入並匯出。");
+        var valueBytes = Encoding.UTF8.GetByteCount(value);
+        if (valueBytes > GitHubSecretLimitBytes)
+            throw new InvalidOperationException(
+                $"登入狀態為 {valueBytes:N0} bytes，超過 GitHub Secret 的 {GitHubSecretLimitBytes:N0} bytes 上限。請重新執行「開始登入並匯出」（匯出時會自動移除分析與歌曲快取資料）。");
         await RunGhAsync(["secret", "set", secretName, "--repo", repository, "--app", "actions"], value);
     }
 
@@ -116,8 +122,21 @@ internal sealed class GitHubActionsService
         var output = await stdout;
         var error = await stderr;
         if (process.ExitCode == 0) return output;
-        if (input is not null) throw new InvalidOperationException("GitHub Secret 更新失敗。請確認 gh auth login 已登入，且具有此儲存庫的 Secrets 寫入權限，再重試。");
-        throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? output.Trim() : error.Trim());
+
+        var detail = (string.IsNullOrWhiteSpace(error) ? output : error).Trim();
+        if (input is null) throw new InvalidOperationException(detail);
+
+        // Secret writes go in on stdin, so gh's own message is the only clue about what failed
+        // (size limit, missing login, missing permission). Never swallow it.
+        var hint = detail.Contains("too large", StringComparison.OrdinalIgnoreCase)
+            || detail.Contains("larger than", StringComparison.OrdinalIgnoreCase)
+            || detail.Contains("exceeds", StringComparison.OrdinalIgnoreCase)
+                ? "登入狀態超過 GitHub Secret 的 64 KB 上限。請清除該瀏覽器設定檔的 musicful.ai 網站資料後重新登入並匯出。"
+                : "請確認 gh auth login 已登入，且具有此儲存庫的 Secrets 寫入權限，再重試。";
+        throw new InvalidOperationException(
+            string.IsNullOrWhiteSpace(detail)
+                ? $"GitHub Secret 更新失敗。{hint}"
+                : $"GitHub Secret 更新失敗。{hint} (gh: {detail})");
     }
 }
 
