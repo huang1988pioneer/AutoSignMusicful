@@ -59,6 +59,11 @@ internal sealed class GitHubActionsService
     public async Task<AccountStreakStatus[]> GetAccountStreakStatusesAsync(string repository, long runId)
     {
         var output = await RunGhAsync(["run", "view", runId.ToString(), "--repo", repository, "--log"]);
+        return ParseAccountStatuses(output);
+    }
+
+    internal static AccountStreakStatus[] ParseAccountStatuses(string output)
+    {
         var byNumber = new Dictionary<int, AccountStreakStatus>();
 
         // Console summary lines, e.g.
@@ -66,7 +71,7 @@ internal sealed class GitHubActionsService
         // Also accepts older "連續 12" form without "簽到/天".
         foreach (Match match in Regex.Matches(
                      output,
-                     @"-\s*#(?<number>\d+)\s+(?<alias>[^:\r\n]+):\s*(?<badge>[✅☑️❌⏭️❔][^\|]*?)\|\s*連續(?:簽到)?\s+(?<days>\d+|—|-)\s*(?:天\s*)?\|",
+                     @"-\s*#(?<number>\d+)\s+(?<alias>[^:\r\n]+):\s*(?<badge>[✅☑️❌⏭️❔][^\|]*?)\|\s*連續(?:簽到)?\s+(?<days>\d+|—|-)\s*(?:天\s*)?\|(?:\s*積分餘額\s+(?<points>\d+|—|-)\s*\|)?",
                      RegexOptions.Multiline))
         {
             if (!int.TryParse(match.Groups["number"].Value, out var number)) continue;
@@ -80,14 +85,15 @@ internal sealed class GitHubActionsService
                 number,
                 match.Groups["alias"].Value.Trim(),
                 days,
-                ran || days is not null);
+                ran || days is not null,
+                int.TryParse(match.Groups["points"].Value, out var points) ? points : null);
         }
 
         // Markdown table rows as a fallback:
         // | 1 | label | ✅ 今日簽到 | +10 | 20 | 12 | 本次新簽 |
         foreach (Match match in Regex.Matches(
                      output,
-                     @"\|\s*(?<number>\d+)\s*\|\s*(?<alias>[^|\r\n]+?)\s*\|\s*(?<status>[^|\r\n]+?)\s*\|\s*[^|\r\n]*\|\s*[^|\r\n]*\|\s*(?<days>\d+|—|-)\s*\|",
+                     @"\|\s*(?<number>\d+)\s*\|\s*(?<alias>[^|\r\n]+?)\s*\|\s*(?<status>[^|\r\n]+?)\s*\|\s*[^|\r\n]*\|\s*[^|\r\n]*\|\s*(?<days>\d+|—|-)\s*\|(?:\s*(?<points>\d+|—|-)\s*\|)?",
                      RegexOptions.Multiline))
         {
             if (!int.TryParse(match.Groups["number"].Value, out var number)) continue;
@@ -100,7 +106,8 @@ internal sealed class GitHubActionsService
                 number,
                 match.Groups["alias"].Value.Trim(),
                 days,
-                true);
+                true,
+                int.TryParse(match.Groups["points"].Value, out var points) ? points : null);
         }
 
         return Enumerable.Range(1, 33)
@@ -160,4 +167,4 @@ internal sealed class GitHubActionsService
 }
 
 internal sealed record RunInfo(long DatabaseId, string Status, string? Conclusion, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string Url);
-internal sealed record AccountStreakStatus(int Number, string Alias, int? StreakDays, bool IsConfigured);
+internal sealed record AccountStreakStatus(int Number, string Alias, int? StreakDays, bool IsConfigured, int? Points = null);

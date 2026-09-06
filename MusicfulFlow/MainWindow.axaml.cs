@@ -274,11 +274,18 @@ public partial class MainWindow : Window
         MonthlyAccountsPanel.Children.Clear();
         foreach (var account in accounts)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("68,*,120") };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("48,*,110,110") };
             row.Children.Add(new TextBlock { Text = $"#{account.Number:00}", FontWeight = Avalonia.Media.FontWeight.SemiBold });
             var alias = new TextBlock { Text = account.Alias, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
             Grid.SetColumn(alias, 1);
             row.Children.Add(alias);
+            var balance = new TextBlock
+            {
+                Text = $"積分 {account.Points?.ToString("N0") ?? "—"}",
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
+            };
+            Grid.SetColumn(balance, 2);
+            row.Children.Add(balance);
             var state = new TextBlock
             {
                 Text = account.IsConfigured
@@ -289,7 +296,7 @@ public partial class MainWindow : Window
                     : Avalonia.Media.Brushes.Gray,
                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
             };
-            Grid.SetColumn(state, 2);
+            Grid.SetColumn(state, 3);
             row.Children.Add(state);
             MonthlyAccountsPanel.Children.Add(row);
         }

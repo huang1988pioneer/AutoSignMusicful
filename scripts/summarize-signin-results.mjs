@@ -57,6 +57,7 @@ function loadRows(rootDir) {
         streakDays: item.streakDays ?? null,
         growthPoints: item.growthPoints ?? null,
         musicPoints: item.musicPoints ?? null,
+        points: item.points ?? null,
         finishedAt: item.finishedAt || null,
         source: file
       });
@@ -281,14 +282,14 @@ function buildMarkdown(rows, meta = {}) {
   const ranRows = rows.filter((r) => r.status !== "skipped");
   if (ranRows.length > 0) {
     lines.push("### 各帳號結果", "");
-    lines.push("| # | 帳號 | 狀態 | 成長點 | 音樂點 | 連續簽到天數 | 備註 |");
-    lines.push("| ---: | --- | --- | ---: | ---: | ---: | --- |");
+    lines.push("| # | 帳號 | 狀態 | 成長點 | 音樂點 | 連續簽到天數 | 積分餘額 | 備註 |");
+    lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | --- |");
     for (const row of ranRows) {
       const no = row.account ?? "—";
       lines.push(
         `| ${no} | ${escapeCell(shortLabel(row))} | ${statusBadge(row.status)} | ${fmtReward(
           row.growthPoints
-        )} | ${fmtNum(row.musicPoints)} | ${fmtNum(row.streakDays)} | ${escapeCell(noteForRow(row))} |`
+        )} | ${fmtNum(row.musicPoints)} | ${fmtNum(row.streakDays)} | ${fmtNum(row.points)} | ${escapeCell(noteForRow(row))} |`
       );
     }
     lines.push("");
@@ -372,7 +373,7 @@ function printConsoleTable(rows, counts) {
   for (const row of rows) {
     if (row.status === "skipped") continue;
     console.log(
-      `- #${row.account ?? "?"} ${shortLabel(row)}: ${statusBadge(row.status)} | 連續簽到 ${fmtNum(row.streakDays)} 天 | 成長 ${fmtNum(row.growthPoints)} | ${row.message}`
+      `- #${row.account ?? "?"} ${shortLabel(row)}: ${statusBadge(row.status)} | 連續簽到 ${fmtNum(row.streakDays)} 天 | 積分餘額 ${fmtNum(row.points)} | 成長 ${fmtNum(row.growthPoints)} | ${row.message}`
     );
   }
   if (counts.skipped_no_secret > 0) {
@@ -436,6 +437,7 @@ function main() {
       streakDays: row.streakDays ?? null,
       growthPoints: row.growthPoints ?? null,
       musicPoints: row.musicPoints ?? null,
+      points: row.points ?? null,
       finishedAt: row.finishedAt || null
     }));
 

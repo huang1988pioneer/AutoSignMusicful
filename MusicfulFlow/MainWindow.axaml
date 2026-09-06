@@ -52,7 +52,8 @@
               <StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="完成時間" FontSize="12"/><TextBlock x:Name="RunTimeMetric" Text="—" FontSize="18" FontWeight="SemiBold"/></StackPanel>
             </Grid>
             <TextBlock x:Name="DashboardStatus" Classes="muted" Text="執行後可在 GitHub Actions 檢視各帳號的成功、失敗與連續簽到天數。" TextWrapping="Wrap"/>
-            <TextBlock Text="各帳號連續簽到天數" FontSize="16" FontWeight="SemiBold"/>
+            <TextBlock Text="各帳號積分餘額與連續簽到天數" FontSize="16" FontWeight="SemiBold"/>
+            <TextBlock Classes="muted" FontSize="12" Text="積分為該次執行時的餘額；— 表示未取得或舊執行未記錄。" TextWrapping="Wrap"/>
             <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="MonthlyAccountsPanel" Spacing="7"/></ScrollViewer>
           </StackPanel></Border>
         </StackPanel>

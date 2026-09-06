@@ -30,7 +30,21 @@ Equal<DateTimeOffset?>(Run(6).UpdatedAt, History(Run(5), rerun).Calculate(now, z
 var saved = History(Run(5), Run(6));
 var restored = JsonSerializer.Deserialize<WorkflowHistory>(JsonSerializer.Serialize(saved))!;
 Equal(saved.Calculate(now, zone), restored.Calculate(now, zone), "saved history roundtrip");
-Console.WriteLine($"PASS: {checks} workflow history checks.");
+var balances = GitHubActionsService.ParseAccountStatuses("""
+- #1 one: ✅ 今日簽到 | 連續簽到 5 天 | 積分餘額 1985 | 成長 10 |
+- #2 two: ☑️ 已簽過 | 連續簽到 — 天 | 積分餘額 0 | 成長 10 |
+- #3 old: ✅ 今日簽到 | 連續簽到 12 天 | 成長 100 |
+| 4 | fallback | ✅ 今日簽到 | +10 | 20 | 7 | 138 | 本次新簽 |
+| 5 | legacy | ✅ 今日簽到 | +10 | 20 | 9 | 本次新簽 |
+""");
+Equal<int?>(1985, balances[0].Points, "console balance");
+Equal<int?>(0, balances[1].Points, "zero balance");
+Equal<int?>(null, balances[2].Points, "legacy missing balance");
+Equal<int?>(12, balances[2].StreakDays, "legacy streak preserved");
+Equal<int?>(138, balances[3].Points, "markdown balance fallback");
+Equal<int?>(7, balances[3].StreakDays, "balance must not replace streak");
+Equal<int?>(null, balances[4].Points, "legacy markdown missing balance");
+Console.WriteLine($"PASS: {checks} workflow history and account checks.");
 
 if (args.Length == 2 && args[0] == "--live")
 {

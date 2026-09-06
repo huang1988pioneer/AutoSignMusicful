@@ -1,4 +1,5 @@
 import { chromium, firefox } from "playwright";
+import { readPoints } from "./musicful-points.mjs";
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -118,6 +119,7 @@ function writeSignInResult(result) {
     streakDays: result.streakDays ?? null,
     growthPoints: result.growthPoints ?? null,
     musicPoints: result.musicPoints ?? null,
+    points: result.points ?? null,
     finishedAt: result.finishedAt || new Date().toISOString(),
     runId: process.env.GITHUB_RUN_ID || null,
     job: process.env.GITHUB_JOB || null
@@ -1512,6 +1514,8 @@ async function main() {
           });
           await applyStealthInit(context);
           const outcome = await signInWithContext(context, account.name);
+          outcome.points = await readPoints(context).catch(() => null);
+          if (outcome.points === null) log(`[${account.name}] 積分餘額未擷取到；保留簽到結果。`);
           if (refreshSecrets) {
             // Only reached when sign-in succeeded; a failure throws before this point.
             const encoded = await captureStorageState(context, account.name);

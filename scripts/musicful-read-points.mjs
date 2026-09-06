@@ -1,4 +1,5 @@
 import { chromium, firefox } from "playwright";
+import { readPoints } from "./musicful-points.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,7 +57,7 @@ try {
     growthPoints: readMatch(text, /已獲得成長積分\s*(\d+)/),
     musicPoints: readMatch(text, /(\d+)\s*\/\s*\d+\s*音樂點/),
     musicPointsMax: readMatch(text, /\d+\s*\/\s*(\d+)\s*音樂點/),
-    points: readMatch(text, /(?<!成長)積分[\s：:]*(\d+)/),
+    points: await readPoints(context).catch(() => null),
     streakDays: readMatch(text, /累[計计]\s*[：:]?\s*(\d+)\s*天/)
       ?? readMatch(text, /[連连][續续][簽签]到\s*[：:]?\s*(\d+)/)
       ?? readMatch(text, /streak\s*[：:]?\s*(\d+)/i),
