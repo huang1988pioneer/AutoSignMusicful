@@ -1,0 +1,40 @@
+using System.Text.Json;
+using MusicfulFlow;
+
+var zone = TimeZoneInfo.CreateCustomTimeZone("Taipei", TimeSpan.FromHours(8), "Taipei", "Taipei");
+var now = DateTimeOffset.Parse("2026-09-06T12:00:00+08:00");
+var checks = 0;
+RunInfo Run(int day, string conclusion = "success", string status = "completed", int hour = 8) =>
+    new(day * 100 + hour, status, conclusion, new DateTimeOffset(2026, 9, day, hour, 0, 0, TimeSpan.FromHours(8)),
+        new DateTimeOffset(2026, 9, day, hour, 0, 0, TimeSpan.FromHours(8)), "https://example.test/run");
+WorkflowHistory History(params RunInfo[] runs) => new("owner/repo", now, runs);
+void Equal<T>(T expected, T actual, string name)
+{
+    if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new Exception($"{name}: expected {expected}, got {actual}");
+    checks++;
+}
+Equal(0, History().Calculate(now, zone).SuccessDays, "empty history");
+Equal(3, History(Run(4), Run(6), Run(5), Run(6, hour: 9)).Calculate(now, zone).SuccessDays, "multiple runs count as one day and order does not matter");
+Equal(2, History(Run(4), Run(5), Run(6, "", "in_progress")).Calculate(now, zone).SuccessDays, "today pending retains yesterday streak");
+Equal(0, History(Run(4)).Calculate(now, zone).SuccessDays, "missing yesterday resets stale streak");
+Equal(1, History(Run(6), Run(4)).Calculate(now, zone).SuccessDays, "calendar gap breaks streak");
+Equal(0, History(Run(6), Run(6, "failure", hour: 9), Run(5)).Calculate(now, zone).SuccessDays, "success cannot mask same-day failure");
+Equal(0, History(Run(6, "cancelled")).Calculate(now, zone).SuccessDays, "cancelled breaks streak");
+Equal(0, History(Run(6, "timed_out")).Calculate(now, zone).SuccessDays, "timeout breaks streak");
+Equal<DateTimeOffset?>(null, History(Run(6, "cancelled")).Calculate(now, zone).LastFailure, "cancelled is not a failed execution date");
+Equal<DateTimeOffset?>(Run(5, "timed_out").UpdatedAt, History(Run(4, "failure"), Run(5, "timed_out"), Run(6)).Calculate(now, zone).LastFailure, "latest failure includes timeout");
+var midnight = Run(5) with { UpdatedAt = DateTimeOffset.Parse("2026-09-05T16:01:00Z") };
+Equal(2, History(midnight, Run(5)).Calculate(now, zone).SuccessDays, "UTC completion mapped to Taipei date");
+var rerun = Run(4) with { UpdatedAt = Run(6).UpdatedAt };
+Equal<DateTimeOffset?>(Run(6).UpdatedAt, History(Run(5), rerun).Calculate(now, zone).LastSuccess, "latest success uses completion not creation");
+var saved = History(Run(5), Run(6));
+var restored = JsonSerializer.Deserialize<WorkflowHistory>(JsonSerializer.Serialize(saved))!;
+Equal(saved.Calculate(now, zone), restored.Calculate(now, zone), "saved history roundtrip");
+Console.WriteLine($"PASS: {checks} workflow history checks.");
+
+if (args.Length == 2 && args[0] == "--live")
+{
+    var history = await new GitHubActionsService(Directory.GetCurrentDirectory()).GetHistoryAsync(args[1]);
+    Console.WriteLine(JsonSerializer.Serialize(history.Calculate(DateTimeOffset.UtcNow, zone)));
+    Console.WriteLine($"Read {history.Runs.Length} real workflow runs.");
+}

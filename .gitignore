@@ -6,3 +6,5 @@ logs/
 node_modules/
 MusicfulFlow/bin/
 MusicfulFlow/obj/
+tests/**/bin/
+tests/**/obj/

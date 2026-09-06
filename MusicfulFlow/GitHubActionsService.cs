@@ -37,6 +37,25 @@ internal sealed class GitHubActionsService
         return JsonSerializer.Deserialize<List<RunInfo>>(output, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.FirstOrDefault();
     }
 
+    public async Task<WorkflowHistory> GetHistoryAsync(string repository)
+    {
+        // Follow every page, rather than silently capping a daily streak at a run limit.
+        var output = await RunGhAsync(["api", $"repos/{repository}/actions/workflows/{Workflow}/runs?per_page=100", "--paginate", "--slurp"]);
+        using var json = JsonDocument.Parse(output);
+        var runs = json.RootElement.EnumerateArray()
+            .SelectMany(page => page.GetProperty("workflow_runs").EnumerateArray())
+            .Select(run => new RunInfo(
+                run.GetProperty("id").GetInt64(),
+                run.GetProperty("status").GetString() ?? "unknown",
+                run.GetProperty("conclusion").GetString(),
+                run.GetProperty("created_at").GetDateTimeOffset(),
+                run.GetProperty("updated_at").GetDateTimeOffset(),
+                run.GetProperty("html_url").GetString() ?? ""))
+            .DistinctBy(run => run.DatabaseId)
+            .OrderByDescending(run => run.CreatedAt).ToArray();
+        return new WorkflowHistory(repository, DateTimeOffset.UtcNow, runs);
+    }
+
     public async Task<AccountStreakStatus[]> GetAccountStreakStatusesAsync(string repository, long runId)
     {
         var output = await RunGhAsync(["run", "view", runId.ToString(), "--repo", repository, "--log"]);

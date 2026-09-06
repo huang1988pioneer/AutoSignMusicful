@@ -299,7 +299,7 @@ function createStdinEnterWaiter(promptLine) {
 }
 
 async function waitForLoggedInGrowthCenter(page, accountName) {
-  log(`[${accountName}] Export mode is open. Log in within ${exportTimeoutMinutes} minute(s). Before and after login, a stable Musicful page will switch to Growth Center after 5 seconds.`);
+  log(`[${accountName}] Export mode is open. Log in within ${exportTimeoutMinutes} minute(s). A stable Musicful page without a login dialog will switch to Growth Center after 5 seconds.`);
 
   let navigationCandidate = "";
   let navigationReadyAt = 0;
@@ -319,9 +319,17 @@ async function waitForLoggedInGrowthCenter(page, accountName) {
         navigationCandidate = "";
         return;
       }
-      // Leave third-party sign-in and authorization callbacks alone.
-      // Musicful's own login page/dialog no longer blocks the initial redirect.
-      if (!onMusicful || /oauth|callback/i.test(url.pathname)) {
+      // Do not redirect a login page or interrupt an open login dialog.
+      const loginVisible = onMusicful && await page.evaluate(() =>
+        [...document.querySelectorAll("input[type='email'], input[type='password'], input[placeholder*='信箱'], .third-login-text")]
+          .some(el => {
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0
+              && rect.width > 0 && rect.height > 0;
+          })
+      );
+      if (!onMusicful || /login|signin|sign-in|oauth|callback|auth/i.test(url.pathname) || loginVisible) {
         navigationCandidate = "";
         return;
       }

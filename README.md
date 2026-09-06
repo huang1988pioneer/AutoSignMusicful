@@ -6,7 +6,11 @@ Musicful 頁面顯示每日簽到以紐約時間 00:00 重置；在台灣時間�
 
 ## 第一次設定
 
-使用 Musicful Flow 桌面工具時，登入前後，頁面穩定 **5 秒**後都會自動切換到 Musicful「成長中心」；登入完成後偵測並自動匯出登入狀態。若未自動切換，可手動前往。請勿關閉瀏覽器；等匯出完成後，再點選「複製 Base64」旁的「更新 GitHub Secret」上傳。
+Musicful Flow 簽到總覽會顯示 Musicful Auto Sign 的上次成功日期、上次失敗日期及 GitHub Actions 連續成功天數，日期皆為台灣時間。每天至少一次成功，且所有已完成執行皆成功才計入；同日多次成功只算一天，缺日、失敗、取消或逾時會中斷。今天尚無已完成執行時保留截至昨天的天數。上次失敗包含 failure、timed_out 與 startup_failure。
+
+開啟程式及點選「更新執行結果」會更新 GitHub 目前可用的歷史紀錄，並保存到本機 `logs/github-action-history.json`。離線時保留上次更新時的統計並標示資料時間；統計範圍為此 workflow 的所有分支與觸發方式。
+
+使用 Musicful Flow 桌面工具時，登入視窗關閉、頁面穩定 **5 秒**後，會自動切換到 Musicful「成長中心」；登入完成後偵測並自動匯出登入狀態。若未自動切換，可手動前往。請勿關閉瀏覽器；等匯出完成後，再點選「複製 Base64」旁的「更新 GitHub Secret」上傳。
 
 建議安裝 **Google Chrome**（預設、較穩定）。若 Chrome 無法使用，可改用 **Microsoft Edge** 或 **Firefox** 備案。
 

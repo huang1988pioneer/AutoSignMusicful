@@ -34,6 +34,14 @@
           <Border Classes="panel"><StackPanel Spacing="18">
             <TextBlock Text="GitHub Actions 儀表板" FontSize="20" FontWeight="SemiBold"/>
             <StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="TriggerButton" Classes="primary" Click="TriggerButton_OnClick">立即執行簽到</Button><Button x:Name="RefreshButton" Click="RefreshButton_OnClick">更新執行結果</Button></StackPanel>
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="24" RowSpacing="14">
+              <StackPanel Spacing="4"><TextBlock Classes="muted" Text="上次成功日期" FontSize="12"/><TextBlock x:Name="LastSuccessMetric" Text="尚未讀取" FontSize="18" FontWeight="SemiBold" Foreground="#0F766E" TextWrapping="Wrap"/></StackPanel>
+              <StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="上次失敗日期" FontSize="12"/><TextBlock x:Name="LastFailureMetric" Text="尚未讀取" FontSize="18" FontWeight="SemiBold" Foreground="#B42318" TextWrapping="Wrap"/></StackPanel>
+              <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="4"><TextBlock Classes="muted" Text="GitHub Actions 連續成功天數" FontSize="12"/><TextBlock x:Name="ActionSuccessDaysMetric" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
+            </Grid>
+            <TextBlock Classes="muted" FontSize="12" Text="以台灣日期計算，每天至少一次成功且所有已完成執行皆成功；同日只算一天。未執行、失敗、取消或逾時會中斷，今天尚未完成執行時保留昨天的紀錄。" TextWrapping="Wrap"/>
+            <TextBlock x:Name="ActionHistoryStatus" Classes="muted" FontSize="12" Text="正在準備讀取執行紀錄…" TextWrapping="Wrap"/>
+            <Border Height="1" Background="#DCE5EF"/>
             <Grid ColumnDefinitions="*,*" ColumnSpacing="24">
               <StackPanel Spacing="4"><TextBlock Classes="muted" Text="已設定帳號" FontSize="12"/><TextBlock x:Name="ConfiguredMetric" Text="—" FontSize="20" FontWeight="SemiBold" Foreground="#0F766E"/></StackPanel>
               <StackPanel Grid.Column="1" Spacing="4"><TextBlock Classes="muted" Text="最近執行" FontSize="12"/><TextBlock x:Name="RunMetric" Text="尚未讀取" FontSize="20" FontWeight="SemiBold"/></StackPanel>
@@ -55,7 +63,7 @@
         </StackPanel>
         <StackPanel x:Name="LoginView" IsVisible="False" Spacing="18">
           <TextBlock Text="更新登入狀態" FontSize="30" FontWeight="SemiBold" Foreground="#132A42"/>
-          <TextBlock Classes="muted" Text="登入前後，頁面穩定 5 秒後都會自動切換到 Musicful「成長中心」；登入完成後自動匯出登入狀態。若未自動切換，可手動前往。請勿關閉瀏覽器，匯出完成後再點選「更新 GitHub Secret」。" TextWrapping="Wrap"/>
+          <TextBlock Classes="muted" Text="登入視窗關閉、頁面穩定 5 秒後，會自動切換到 Musicful「成長中心」；登入完成後自動匯出登入狀態。若未自動切換，可手動前往。請勿關閉瀏覽器，匯出完成後再點選「更新 GitHub Secret」。" TextWrapping="Wrap"/>
           <Border Classes="panel"><StackPanel Spacing="14">
             <TextBlock Text="選擇帳號" FontSize="19" FontWeight="SemiBold"/>
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">

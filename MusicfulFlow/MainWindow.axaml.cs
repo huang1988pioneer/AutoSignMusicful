@@ -29,6 +29,20 @@ public partial class MainWindow : Window
         BuildAliasList();
         ConfiguredMetric.Text = $"{_aliases.Count} 個";
         UpdateAccountDisplay();
+        try
+        {
+            var cacheFile = Path.Combine(_workspace, "logs", "github-action-history.json");
+            if (File.Exists(cacheFile))
+            {
+                var cached = JsonSerializer.Deserialize<WorkflowHistory>(File.ReadAllText(cacheFile));
+                if (cached?.Runs is not null) RenderActionHistory(cached, true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            ActionHistoryStatus.Text = "本機紀錄無法讀取，開啟後將重新更新。";
+        }
+        Opened += (_, _) => RefreshButton_OnClick(this, new RoutedEventArgs());
     }
 
     private int AccountNumber => AccountComboBox.SelectedIndex + 1;
@@ -93,9 +107,9 @@ public partial class MainWindow : Window
             }
             LoginStatus.Text = BrowserName switch
             {
-                "firefox" => "Firefox 已開啟（備案）。登入前後，頁面穩定 5 秒後都會自動切換到「成長中心」；登入完成後自動偵測匯出；請勿關閉瀏覽器。",
-                "edge" => "Microsoft Edge 已開啟（備案）。登入前後，頁面穩定 5 秒後都會自動切換到「成長中心」；登入完成後自動偵測匯出；請勿關閉瀏覽器。",
-                _ => "瀏覽器已開啟。登入前後，頁面穩定 5 秒後都會自動切換到「成長中心」；登入完成後自動偵測匯出；請勿關閉瀏覽器。"
+                "firefox" => "Firefox 已開啟（備案）。登入視窗關閉、頁面穩定 5 秒後，會自動切換到「成長中心」；登入完成後自動偵測匯出；請勿關閉瀏覽器。",
+                "edge" => "Microsoft Edge 已開啟（備案）。登入視窗關閉、頁面穩定 5 秒後，會自動切換到「成長中心」；登入完成後自動偵測匯出；請勿關閉瀏覽器。",
+                _ => "瀏覽器已開啟。登入視窗關閉、頁面穩定 5 秒後，會自動切換到「成長中心」；登入完成後自動偵測匯出；請勿關閉瀏覽器。"
             };
             await RunProcessAsync("npm", ["run", "export-state", "--", "--profile", ProfileName, "--browser", BrowserName]);
             if (!File.Exists(StateFile)) throw new InvalidOperationException("未找到匯出的登入狀態檔。請確認你已在瀏覽器中登入 Musicful。");
@@ -182,17 +196,69 @@ public partial class MainWindow : Window
         {
             DashboardStatus.Text = "正在讀取 GitHub Actions…";
             var repository = await _github.GetRepositoryAsync();
-            var run = await _github.GetLatestAsync(repository);
-            if (run is null) { RunMetric.Text = "尚無執行紀錄"; MonthlyStreakMetric.Text = "—"; RunTimeMetric.Text = "—"; DashboardStatus.Text = "尚未找到 Musicful Auto Sign 執行紀錄。"; return; }
+            var cacheFile = Path.Combine(_workspace, "logs", "github-action-history.json");
+            try
+            {
+                if (File.Exists(cacheFile))
+                {
+                    var cached = JsonSerializer.Deserialize<WorkflowHistory>(await File.ReadAllTextAsync(cacheFile));
+                    if (cached?.Repository == repository && cached.Runs is not null) RenderActionHistory(cached, true);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                ActionHistoryStatus.Text = "本機紀錄無法讀取，正在重新取得 GitHub 資料…";
+            }
+            WorkflowHistory history;
+            try { history = await _github.GetHistoryAsync(repository); }
+            catch
+            {
+                ActionHistoryStatus.Text += " 更新失敗，可點選「更新執行結果」重試。";
+                throw;
+            }
+            RenderActionHistory(history, false);
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(cacheFile)!);
+                await File.WriteAllTextAsync(cacheFile + ".tmp", JsonSerializer.Serialize(history));
+                File.Move(cacheFile + ".tmp", cacheFile, true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ActionHistoryStatus.Text += " 本機儲存失敗，關閉程式後可能無法保留此次紀錄。";
+            }
+            var run = history.Runs.FirstOrDefault();
+            if (run is null) { RunMetric.Text = "尚無執行紀錄"; MonthlyStreakMetric.Text = "—"; RunTimeMetric.Text = "—"; MonthlyAccountsPanel.Children.Clear(); DashboardStatus.Text = "尚未找到 Musicful Auto Sign 執行紀錄。"; return; }
             RunMetric.Text = string.IsNullOrWhiteSpace(run.Conclusion) ? run.Status : run.Conclusion;
-            RunTimeMetric.Text = TimeZoneInfo.ConvertTime(run.UpdatedAt, GetTaipeiZone()).ToString("MM/dd HH:mm");
-            var accounts = await _github.GetAccountStreakStatusesAsync(repository, run.DatabaseId);
+            RunTimeMetric.Text = run.Status == "completed" ? TimeZoneInfo.ConvertTime(run.UpdatedAt, GetTaipeiZone()).ToString("MM/dd HH:mm") : "尚未完成";
+            var completedRun = history.Runs.FirstOrDefault(item => item.Status == "completed");
+            if (completedRun is null)
+            {
+                MonthlyAccountsPanel.Children.Clear();
+                MonthlyStreakMetric.Text = "—";
+                DashboardStatus.Text = "尚無已完成執行，請稍後更新結果。";
+                return;
+            }
+            var accounts = await _github.GetAccountStreakStatusesAsync(repository, completedRun.DatabaseId);
             var configured = accounts.Count(account => account.IsConfigured);
             var withStreak = accounts.Count(account => account.StreakDays is not null);
             MonthlyStreakMetric.Text = $"{withStreak} 有天數 · {configured} 已執行";
             RenderStreakAccounts(accounts);
-            DashboardStatus.Text = $"最近執行：{run.Url}";
+            DashboardStatus.Text = $"最近執行：{run.Url}" + (completedRun.DatabaseId != run.DatabaseId ? "\n帳號天數顯示最近已完成執行的結果。" : "");
         });
+    }
+
+    private void RenderActionHistory(WorkflowHistory history, bool cached)
+    {
+        var statistics = history.Calculate(cached ? history.FetchedAt : DateTimeOffset.UtcNow, GetTaipeiZone());
+        string FormatDate(DateTimeOffset? value) => value is null
+            ? "可用紀錄中尚無"
+            : TimeZoneInfo.ConvertTime(value.Value, GetTaipeiZone()).ToString("yyyy/MM/dd HH:mm");
+        LastSuccessMetric.Text = FormatDate(statistics.LastSuccess);
+        LastFailureMetric.Text = FormatDate(statistics.LastFailure);
+        ActionSuccessDaysMetric.Text = $"{statistics.SuccessDays} 天";
+        var fetched = TimeZoneInfo.ConvertTime(history.FetchedAt, GetTaipeiZone()).ToString("yyyy/MM/dd HH:mm");
+        ActionHistoryStatus.Text = $"{(cached ? "本機紀錄，尚未更新" : "已更新")}：{fetched}（台灣時間） · {history.Runs.Length} 次執行。統計以 GitHub 目前可用紀錄為準。";
     }
 
     private async Task WithDashboardBusy(Func<Task> action)
