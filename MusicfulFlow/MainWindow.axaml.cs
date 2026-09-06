@@ -92,9 +92,9 @@ public partial class MainWindow : Window
             }
             LoginStatus.Text = BrowserName switch
             {
-                "firefox" => "Firefox 已開啟（備案）。請完成登入並停留在成長中心；請勿關閉瀏覽器，工具會在偵測成功後自動匯出。",
-                "edge" => "Microsoft Edge 已開啟（備案）。請完成登入並停留在成長中心；請勿關閉瀏覽器，工具會在偵測成功後自動匯出。",
-                _ => "瀏覽器已開啟。請完成登入並停留在成長中心；請勿關閉瀏覽器，工具會在偵測成功後自動匯出。"
+                "firefox" => "Firefox 已開啟（備案）。登入後，必須手動前往「成長中心」並停留在該頁，工具才能偵測並自動匯出；請勿關閉瀏覽器。",
+                "edge" => "Microsoft Edge 已開啟（備案）。登入後，必須手動前往「成長中心」並停留在該頁，工具才能偵測並自動匯出；請勿關閉瀏覽器。",
+                _ => "瀏覽器已開啟。登入後，必須手動前往「成長中心」並停留在該頁，工具才能偵測並自動匯出；請勿關閉瀏覽器。"
             };
             await RunProcessAsync("npm", ["run", "export-state", "--", "--profile", ProfileName, "--browser", BrowserName]);
             if (!File.Exists(StateFile)) throw new InvalidOperationException("未找到匯出的登入狀態檔。請確認你已在瀏覽器中登入 Musicful。");

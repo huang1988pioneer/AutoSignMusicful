@@ -6,6 +6,8 @@ Musicful 頁面顯示每日簽到以紐約時間 00:00 重置；在台灣時間�
 
 ## 第一次設定
 
+使用 Musicful Flow 桌面工具時，登入完成後必須**手動前往 Musicful「成長中心」並停留在該頁**，工具才能偵測並自動匯出登入狀態。請勿關閉瀏覽器；等匯出完成後，再點選「複製 Base64」旁的「更新 GitHub Secret」上傳。
+
 建議安裝 **Google Chrome**（預設、較穩定）。若 Chrome 無法使用，可改用 **Microsoft Edge** 或 **Firefox** 備案。
 
 ```bash
