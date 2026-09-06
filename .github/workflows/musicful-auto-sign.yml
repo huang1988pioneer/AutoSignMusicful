@@ -18,6 +18,12 @@ on:
 permissions:
   contents: read
 
+# Storage states are written back after a run, so never let two runs overlap and
+# push stale cookies over fresher ones.
+concurrency:
+  group: musicful-auto-sign
+  cancel-in-progress: false
+
 jobs:
   signin:
     name: daily-signin
@@ -34,6 +40,10 @@ jobs:
       MUSICFUL_SIGNIN_URL: ${{ vars.MUSICFUL_SIGNIN_URL || 'https://tw.musicful.ai/growth-center/' }}
       MUSICFUL_DELAY_MIN_MS: ${{ vars.MUSICFUL_DELAY_MIN_MS || '5000' }}
       MUSICFUL_DELAY_MAX_MS: ${{ vars.MUSICFUL_DELAY_MAX_MS || '15000' }}
+      # Passive renewal. Needs MUSICFUL_SECRET_WRITE_TOKEN (PAT with Secrets: read and write);
+      # without it the run only reports which states changed. Set the variable to 0 to turn off.
+      MUSICFUL_REFRESH_SECRETS: ${{ vars.MUSICFUL_REFRESH_SECRETS || '1' }}
+      MUSICFUL_SECRET_WRITE_TOKEN: ${{ secrets.MUSICFUL_SECRET_WRITE_TOKEN }}
       # Labels mirror previous matrix names (shown in Job Summary).
       MUSICFUL_ACCOUNT_LABELS_JSON: >-
         {"1":"goldshoot0720","2":"abuhg17","3":"fengtuprinfo","4":"feng33feng35feng3","5":"chbondg2","6":"huang1988pioneer","7":"chbondg_outloook","8":"gaokaolevel3iptopscorer_outlook","9":"huang1988pioneer_outloook","10":"fengtuta_tuta","11":"fengfence_fence","12":"samafengtu","13":"fengtusama","14":"fengwithting0831","15":"fengwithfeng1127","16":"fengwithtu1127","17":"akaonda333","18":"fbussinesseng","19":"engdictatorf","20":"flottojackpoteng","21":"tushenbyfengbro","22":"account_22","23":"account_23","24":"account_24","25":"account_25","26":"account_26","27":"account_27","28":"account_28","29":"account_29","30":"account_30","31":"account_31","32":"account_32","33":"account_33"}

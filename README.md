@@ -194,6 +194,48 @@ workflow 每天在三個時段各執行一次，涵蓋所有已設定帳號：
 2. 到 GitHub **更新**對應編號 secret 的內容（同名 secret 可直接改值）。
 3. 用 `account_index` 指定該編號手動跑一次 workflow 驗證。
 
+#### 被動續期（自動把新 cookie 寫回 secret）
+
+每次簽到成功後，瀏覽器手上的 cookie 通常已被 Musicful 換發成更新的一份。開啟被動續期後，
+腳本會把**簽到後**的 storage state 寫回同一個編號 secret，讓登入狀態隨每天簽到自動延壽，
+不用等到過期才手動重匯出。
+
+它**不會**繞過任何驗證：只是保存瀏覽器已經拿到的 cookie，登入仍然是你手動做的。
+
+設定方式：
+
+1. 建立一個有寫入 secret 權限的 token（GITHUB_TOKEN 做不到）：
+   - Fine-grained PAT → 該 repo → **Secrets: Read and write**（另需 Metadata: Read-only）
+   - 或 classic PAT → `repo` scope
+2. 把它存成 repository secret **`MUSICFUL_SECRET_WRITE_TOKEN`**。
+3. 完成。`Musicful Auto Sign` 預設就會啟用（`MUSICFUL_REFRESH_SECRETS` 預設 `1`）。
+
+行為與保護措施：
+
+- 只有**簽到成功**的帳號才會寫回；失敗 / 過期的帳號完全不動原本的 secret。
+- 匯出結果沒有任何 cookie 時會跳過，不會用空狀態覆蓋掉好的 secret。
+- 內容和舊值相同就不寫，避免無謂的 secret 版本。
+- 超過 GitHub 的 48 KB secret 上限時跳過並在日誌標示。
+- 日誌只印 secret 名稱、位元組數與 sha 前 8 碼，**不會**印出狀態內容。
+- workflow 加了 `concurrency` 群組，避免兩個 run 同時把舊 cookie 蓋掉新的。
+
+先觀察不寫入（建議第一次這樣跑）：不要設 `MUSICFUL_SECRET_WRITE_TOKEN`，日誌會顯示
+`Secret refresh: N state(s) changed but MUSICFUL_SECRET_WRITE_TOKEN is unset`，
+確認有偵測到變動後再放 token。
+
+關閉：把 repository variable `MUSICFUL_REFRESH_SECRETS` 設成 `0`。
+
+相關環境變數：
+
+| 變數 | 預設 | 說明 |
+| --- | --- | --- |
+| `MUSICFUL_REFRESH_SECRETS` | `1`（workflow 內） | `1` 啟用被動續期；本機也可加 `--refresh-secrets` |
+| `MUSICFUL_SECRET_WRITE_TOKEN` | 無 | 寫入 secret 用的 PAT；沒有就只回報不寫入 |
+| `MUSICFUL_SECRET_REPO` | `GITHUB_REPOSITORY` | 目標 repo（`owner/name`），本機執行時需要 |
+| `MUSICFUL_MAX_SECRET_BYTES` | `48000` | 超過此大小的狀態不寫回 |
+
+> 寫回是用 `gh secret set`（GitHub CLI），值透過 stdin 傳入，不會出現在命令列或 process list。
+
 #### 檢查重複 secret（建議）
 
 另一個 workflow：`.github/workflows/check-musicful-secrets.yml`  
@@ -252,6 +294,7 @@ npm run summary -- path/to/artifacts
 | `MUSICFUL_SIGNIN_URL` | `https://tw.musicful.ai/growth-center/` | 成長中心網址 |
 | `MUSICFUL_DELAY_MIN_MS` | `5000` | 帳號間最短等待（毫秒） |
 | `MUSICFUL_DELAY_MAX_MS` | `15000` | 帳號間最長等待（毫秒） |
+| `MUSICFUL_REFRESH_SECRETS` | `1` | 被動續期；設 `0` 關閉自動寫回 secret |
 
 ## 自訂網址
 

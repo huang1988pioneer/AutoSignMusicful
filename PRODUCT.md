@@ -23,6 +23,7 @@ The app runs beside this repository on Windows, macOS, or Linux. A user complete
 - Accounts use `MUSICFUL_STORAGE_STATE_BASE64_1` through `_33` GitHub secrets.
 - The existing Node/Playwright scripts remain the source of truth for browser automation.
 - GitHub Actions access requires the authenticated GitHub CLI (`gh`).
+- Scheduled runs may write the post-sign-in storage state back to the same account secret (passive renewal). This persists cookies the site already issued; it never performs or bypasses a login. It requires an opt-in secret-write token and is skipped for any account whose sign-in failed.
 - Inferred from the existing repository and the requested reference implementation; account labels remain locally editable.
 
 ## Brand Commitments

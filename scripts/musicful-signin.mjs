@@ -1,5 +1,6 @@
 import { chromium, firefox } from "playwright";
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
@@ -48,6 +49,14 @@ const rawExportReadyDelaySeconds = Number.parseInt(process.env.MUSICFUL_EXPORT_R
 const exportReadyDelaySeconds = Number.isFinite(rawExportReadyDelaySeconds) && rawExportReadyDelaySeconds >= 0
   ? rawExportReadyDelaySeconds
   : 3;
+// Passive renewal: after a successful sign-in, push the cookies the site rotated during
+// the visit back into that account's GitHub Secret so the stored state does not age out.
+const refreshSecrets = process.env.MUSICFUL_REFRESH_SECRETS === "1" || args.has("--refresh-secrets");
+const secretWriteToken = process.env.MUSICFUL_SECRET_WRITE_TOKEN || "";
+const secretRepo = process.env.MUSICFUL_SECRET_REPO || process.env.GITHUB_REPOSITORY || "";
+const rawMaxSecretBytes = Number.parseInt(process.env.MUSICFUL_MAX_SECRET_BYTES || "48000", 10);
+// GitHub caps an Actions secret at 48 KB; skip oversized states instead of failing the write.
+const maxSecretBytes = Number.isFinite(rawMaxSecretBytes) && rawMaxSecretBytes > 0 ? rawMaxSecretBytes : 48_000;
 
 fs.mkdirSync(profileDir, { recursive: true });
 fs.mkdirSync(logDir, { recursive: true });
@@ -826,6 +835,80 @@ function selectScheduledStorageState(storageStates) {
   return [target];
 }
 
+/**
+ * Base64 of the context's current cookies/localStorage/indexedDB, or null when the
+ * export failed or came back without cookies (never overwrite a good secret with that).
+ */
+async function captureStorageState(context, accountName) {
+  try {
+    const state = await context.storageState({ indexedDB: true });
+    if (!state?.cookies?.length) {
+      log(`[${accountName}] Skipping secret refresh: exported state has no cookies.`);
+      return null;
+    }
+    return Buffer.from(JSON.stringify(state), "utf8").toString("base64");
+  } catch (error) {
+    log(`[${accountName}] Could not export storage state for refresh: ${error.message}`);
+    return null;
+  }
+}
+
+/** Short digest for logs — the state itself is never logged. */
+function shortStateHash(encoded) {
+  return crypto.createHash("sha256").update(encoded).digest("hex").slice(0, 8);
+}
+
+/**
+ * Write refreshed states back with `gh secret set`, once every account has finished:
+ * spawnSync inside runAccount would stall the other concurrent sign-ins.
+ * @param {{ name: string, encoded: string, hash: string }[]} updates
+ */
+function pushSecretUpdates(updates) {
+  if (updates.length === 0) {
+    log("Secret refresh: no account state changed; nothing to write back.");
+    return;
+  }
+  if (!secretWriteToken) {
+    log(`Secret refresh: ${updates.length} state(s) changed but MUSICFUL_SECRET_WRITE_TOKEN is unset; secrets left untouched.`);
+    return;
+  }
+  if (!secretRepo) {
+    log("Secret refresh: target repository is unknown (set MUSICFUL_SECRET_REPO); secrets left untouched.");
+    return;
+  }
+
+  let updated = 0;
+  for (const update of updates) {
+    const bytes = Buffer.byteLength(update.encoded, "utf8");
+    if (bytes > maxSecretBytes) {
+      log(`Secret refresh: ${update.name} is ${bytes} bytes (limit ${maxSecretBytes}); skipped.`);
+      continue;
+    }
+
+    // The value goes in on stdin so it never lands in a command line or process list.
+    const result = spawnSync("gh", ["secret", "set", update.name, "--repo", secretRepo], {
+      input: update.encoded,
+      encoding: "utf8",
+      windowsHide: true,
+      env: { ...process.env, GH_TOKEN: secretWriteToken, GITHUB_TOKEN: secretWriteToken }
+    });
+
+    if (result.error) {
+      log(`Secret refresh: ${update.name} could not run gh: ${result.error.message}`);
+      continue;
+    }
+    if (result.status !== 0) {
+      log(`Secret refresh: ${update.name} failed (exit ${result.status}): ${(result.stderr || "").trim()}`);
+      continue;
+    }
+
+    updated += 1;
+    log(`Secret refresh: ${update.name} updated (${bytes} bytes, sha ${update.hash}).`);
+  }
+
+  log(`Secret refresh: updated ${updated}/${updates.length} secret(s).`);
+}
+
 function parseStorageState(encoded, name) {
   try {
     return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
@@ -1281,11 +1364,18 @@ async function main() {
   const storageStates = selectScheduledStorageState(collectStorageStates());
   if (storageStates.length > 0 || process.env.GITHUB_ACTIONS === "true" || process.env.MUSICFUL_AUTO_SUMMARY === "1") {
     log(`Found ${storageStates.length} Musicful account storage state(s).`);
+    if (refreshSecrets) {
+      log(secretWriteToken
+        ? `Secret refresh is on; changed states will be written back to ${secretRepo || "(unknown repo)"}.`
+        : "Secret refresh is on but no write token is configured; changes will only be reported.");
+    }
     log(`Browser: ${describeBrowserEngine(engine)}`);
     const browser = storageStates.length > 0 ? await engine.launcher.launch(browserOptions) : null;
     let failures = 0;
     /** @type {ReturnType<typeof writeSignInResult>[]} */
     const results = [];
+    /** @type {{ name: string, encoded: string, hash: string }[]} */
+    const pendingSecretUpdates = [];
 
     try {
       // Start every account in its own context.  The offsets are cumulative, so
@@ -1320,6 +1410,15 @@ async function main() {
           });
           await applyStealthInit(context);
           const outcome = await signInWithContext(context, account.name);
+          if (refreshSecrets) {
+            // Only reached when sign-in succeeded; a failure throws before this point.
+            const encoded = await captureStorageState(context, account.name);
+            if (encoded && encoded !== String(account.value).trim()) {
+              const hash = shortStateHash(encoded);
+              pendingSecretUpdates.push({ name: account.name, encoded, hash });
+              log(`[${account.name}] Storage state changed; queued secret refresh (sha ${hash}).`);
+            }
+          }
           results.push(writeSignInResult({
             ...meta,
             ...outcome
@@ -1340,6 +1439,10 @@ async function main() {
       await Promise.all(accountTasks);
     } finally {
       if (browser) await browser.close();
+    }
+
+    if (refreshSecrets) {
+      pushSecretUpdates(pendingSecretUpdates);
     }
 
     const ranIndexes = results
