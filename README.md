@@ -2,6 +2,13 @@
 
 這個小工具會用獨立的瀏覽器登入狀態打開 Musicful 成長中心，並嘗試完成每日簽到。
 
+> [!WARNING]
+> **GitHub Actions 排程將於 2026/11/26 之後暫停**
+>
+> 自 **2026/11/27（台灣時間）起**，`Musicful Auto Sign` 與 `Check Musicful Secrets` 的**排程觸發**會自動跳過，不再簽到或檢查；2026/11/26 當天（含）仍正常執行。
+> 暫停後仍可在 Actions 頁面手動 **Run workflow**，本機簽到（`npm run signin`、macOS 排程）不受影響。
+> 若要恢復排程，請修改兩個 workflow 中 `schedule-gate` job 的截止日期 `20261126`。
+
 Musicful 頁面顯示每日簽到以紐約時間 00:00 重置；在台灣時間約為 12:00 或 13:00，所以 macOS 排程預設每天 13:10 執行。
 
 ## 第一次設定
@@ -181,6 +188,8 @@ workflow 每天在三個時段各執行一次，涵蓋所有已設定帳號：
 
 （cron 為 UTC `0 21 * * *`、`0 5 * * *` 與 `0 13 * * *`，對應台灣時間 05:00 / 13:00 / 21:00。）
 
+> **提醒：** 2026/11/26（不含）之後，排程觸發的 run 會由 `schedule-gate` job 判斷台灣日期後跳過簽到 job；手動 Run workflow 不受影響。
+
 #### 手動執行 / 只跑單一帳號
 
 在 Actions 頁面選 **Musicful Auto Sign** → **Run workflow**：
@@ -247,7 +256,7 @@ workflow 每天在三個時段各執行一次，涵蓋所有已設定帳號：
 另一個 workflow：`.github/workflows/check-musicful-secrets.yml`  
 （Actions 名稱：**Check Musicful Secrets**）
 
-- 每天台灣時間約 **04:30** 自動跑，也可手動 **Run workflow**。
+- 每天台灣時間約 **04:30** 自動跑（**2026/11/26 之後排程暫停**），也可手動 **Run workflow**。
 - 會檢查：
   - 多個 secret 內容是否完全相同
   - 解碼後的 storage state 是否相同

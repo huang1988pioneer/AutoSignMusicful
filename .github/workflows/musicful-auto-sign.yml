@@ -25,8 +25,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  schedule-gate:
+    name: schedule-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      active: ${{ steps.check.outputs.active }}
+    steps:
+      - name: Check schedule end date
+        id: check
+        shell: bash
+        run: |
+          # Scheduled runs are paused after 2026-11-26 (Taiwan time, that day still runs).
+          # Manual workflow_dispatch runs are not affected.
+          today=$(TZ=Asia/Taipei date +%Y%m%d)
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$today" -gt 20261126 ]; then
+            echo "Scheduled runs paused after 2026-11-26 (Taiwan date ${today}); skipping."
+            echo "active=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "active=true" >> "$GITHUB_OUTPUT"
+          fi
+
   signin:
     name: daily-signin
+    needs: schedule-gate
+    if: needs.schedule-gate.outputs.active == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
